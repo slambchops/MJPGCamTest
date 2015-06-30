@@ -19,17 +19,17 @@
  /home/amxfirmware/Android/android-ndk-r10c/platforms/android-9/arch-arm/usr/include/machine/kernel.h \
  /home/amxfirmware/Android/android-ndk-r10c/platforms/android-9/arch-arm/usr/include/sys/sysmacros.h \
  /home/amxfirmware/Android/android-ndk-r10c/platforms/android-9/arch-arm/usr/include/linux/time.h \
- /home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/imx6_codec_lib/enzo_codec.h \
- /home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/imx6_codec_lib/enzo_utils.h \
- /home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/imx6_codec_lib/vpu_common.h \
+ /home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/enzo_codec/enzo_codec.h \
+ /home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/enzo_codec/enzo_utils.h \
+ /home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/enzo_codec/vpu_common.h \
  /home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/vpu/vpu_io.h \
  /home/amxfirmware/Android/android-ndk-r10c/platforms/android-9/arch-arm/usr/include/android/log.h \
- /home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/imx6_codec_lib/vpu_decode.h \
+ /home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/enzo_codec/vpu_decode.h \
  /home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/vpu/vpu_lib.h \
- /home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/imx6_codec_lib/vpu_encode.h \
- /home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/imx6_codec_lib/v4l2_camera.h \
+ /home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/enzo_codec/vpu_encode.h \
+ /home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/enzo_codec/v4l2_camera.h \
  /home/amxfirmware/Android/android-ndk-r10c/platforms/android-9/arch-arm/usr/include/linux/videodev2.h \
- /home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/imx6_codec_lib/enzo_utils.h \
+ /home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/enzo_codec/enzo_utils.h \
  /home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/g2d/g2d.h \
  /home/amxfirmware/data/EnzoCamTest/jni/CamView.h \
  /home/amxfirmware/Android/android-ndk-r10c/platforms/android-9/arch-arm/usr/include/util.h \
@@ -100,27 +100,27 @@
 
 /home/amxfirmware/Android/android-ndk-r10c/platforms/android-9/arch-arm/usr/include/linux/time.h:
 
-/home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/imx6_codec_lib/enzo_codec.h:
+/home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/enzo_codec/enzo_codec.h:
 
-/home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/imx6_codec_lib/enzo_utils.h:
+/home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/enzo_codec/enzo_utils.h:
 
-/home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/imx6_codec_lib/vpu_common.h:
+/home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/enzo_codec/vpu_common.h:
 
 /home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/vpu/vpu_io.h:
 
 /home/amxfirmware/Android/android-ndk-r10c/platforms/android-9/arch-arm/usr/include/android/log.h:
 
-/home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/imx6_codec_lib/vpu_decode.h:
+/home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/enzo_codec/vpu_decode.h:
 
 /home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/vpu/vpu_lib.h:
 
-/home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/imx6_codec_lib/vpu_encode.h:
+/home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/enzo_codec/vpu_encode.h:
 
-/home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/imx6_codec_lib/v4l2_camera.h:
+/home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/enzo_codec/v4l2_camera.h:
 
 /home/amxfirmware/Android/android-ndk-r10c/platforms/android-9/arch-arm/usr/include/linux/videodev2.h:
 
-/home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/imx6_codec_lib/enzo_utils.h:
+/home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/enzo_codec/enzo_utils.h:
 
 /home/amxfirmware/data/EnzoCamTest/jni/enzo-libs/g2d/g2d.h:
 

@@ -28,7 +28,7 @@ include $(PREBUILT_SHARED_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_MODULE    := libenzocodec
 LOCAL_SRC_FILES := $(LOCAL_PATH)/enzo-libs/libenzocodec.so
-LOCAL_EXPORT_C_INCLUDES := $(LOCAL_PATH)/enzo-libs/imx6_codec_lib
+LOCAL_EXPORT_C_INCLUDES := $(LOCAL_PATH)/enzo-libs/enzo_codec
 
 include $(PREBUILT_SHARED_LIBRARY)
 include $(CLEAR_VARS)
@@ -37,7 +37,7 @@ include $(CLEAR_VARS)
 LOCAL_C_INCLUDES += $(LOCAL_PATH) \
 	$(LOCAL_PATH)/enzo-libs/g2d \
 	$(LOCAL_PATH)/enzo-libs/vpu \
-	$(LOCAL_PATH)/enzo-libs/imx6_codec_lib
+	$(LOCAL_PATH)/enzo-libs/enzo_codec
 
 LOCAL_MODULE    := libcamview
 LOCAL_SRC_FILES := CamView.c
