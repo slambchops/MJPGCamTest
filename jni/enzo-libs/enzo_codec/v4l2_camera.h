@@ -1,6 +1,10 @@
 #ifndef CAMERA_H
 #define CAMERA_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "enzo_utils.h"
 
 #include <linux/videodev2.h>
@@ -34,5 +38,8 @@ int v4l2_cameraDeinit(struct camera_info *camera);
 int v4l2_cameraGetFrame(struct camera_info *camera, struct mediaBuffer *cam_src);
 int v4l2_cameraInit(struct camera_info *camera);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif // CAMERA_H

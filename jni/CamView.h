@@ -4,10 +4,6 @@
 
 #include "util.h"
 
-static int DEVICE_DESCRIPTOR = -1;
-int* RGB_BUFFER = NULL;
-int* Y_BUFFER = NULL;
-
 /*
  * Class:     com_example_enzocamtest_CamView
  * Method:    startCamera

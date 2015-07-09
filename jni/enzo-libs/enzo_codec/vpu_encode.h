@@ -1,6 +1,10 @@
 #ifndef VPU_ENCODE_H
 #define VPU_ENCODE_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "enzo_utils.h"
 #include "vpu_common.h"
 
@@ -43,6 +47,10 @@ int vpu_encoder_deinit(struct encoder_info *enc);
 int vpu_encoder_encode_frame(struct encoder_info *enc,
 			 struct mediaBuffer *vid_src,
 			 struct mediaBuffer *enc_dst);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
 

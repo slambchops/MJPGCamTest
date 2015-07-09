@@ -1,6 +1,10 @@
 #ifndef VPU_COMMON_H
 #define VPU_COMMON_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "vpu_io.h"
 
 #define STREAM_BUF_SIZE		0x200000
@@ -22,9 +26,9 @@ struct frame_buf {
 	vpu_mem_desc desc;
 };
 
-static int fb_index;
-static struct frame_buf *fbarray[NUM_FRAME_BUFS];
-static struct frame_buf fbpool[NUM_FRAME_BUFS];
+//static int fb_index;
+//static struct frame_buf *fbarray[NUM_FRAME_BUFS];
+//static struct frame_buf fbpool[NUM_FRAME_BUFS];
 
 struct frame_buf *framebuf_alloc(int stdMode, int format,
 				 int strideY, int height, int mvCol);
@@ -32,5 +36,9 @@ void framebuf_free(struct frame_buf *fb);
 void framebuf_init(void);
 struct frame_buf *get_framebuf(void);
 void put_framebuf(struct frame_buf *fb);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

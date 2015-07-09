@@ -209,19 +209,14 @@ static void decoder_close(struct decoder_info *dec)
 static int decoder_allocate_framebuffer(struct decoder_info *dec)
 {
 	DecBufInfo bufinfo;
-	int i, regfbcount = dec->regfbcount, totalfb, img_size, mvCol;
-	int deblock_en = 0;
-	int dering_en = 0;
-	int tiled2LinearEnable =  0;
+	int i, regfbcount = dec->regfbcount, totalfb, mvCol;
 	int vpu_fmt = 0;
 	int color_space = 0;
+	int stride = 0;
 	RetCode ret;
 	DecHandle handle = dec->handle;
 	FrameBuffer *fb;
 	struct frame_buf **pfbpool;
-	int stride, divX, divY;
-	vpu_mem_desc *mvcol_md = NULL;
-	Rect rotCrop;
 	int delay = -1;
 
 	color_space = dec->color_space;
@@ -335,7 +330,7 @@ static int decoder_parse(struct decoder_info *dec)
 {
 	DecInitialInfo initinfo;
 	DecHandle handle = dec->handle;
-	int align, profile, level, extended_fbcount;
+	int align, extended_fbcount;
 	RetCode ret;
 	char *count;
 
@@ -645,25 +640,19 @@ static int decoder_decode_frame(struct decoder_info *dec, struct mediaBuffer *en
 	DecParam decparam;
 	int rot_en = 0, rot_stride, fwidth, fheight;
 	int rot_angle = 0;
-	int deblock_en = 0;
 	int dering_en = 0;
-	FrameBuffer *deblock_fb = NULL;
 	FrameBuffer *fb = dec->fb;
-	struct frame_buf **pfbpool = dec->pfbpool;
-	struct frame_buf *pfb = NULL;
-	int err = 0, eos = 0, fill_end_bs = 0, fillsize = 0, decodefinish = 0;
+	int err = 0, eos = 0, fill_end_bs = 0, decodefinish = 0;
 	RetCode ret;
-	int sec, usec, loop_id;
+	int loop_id;
 	u32 img_size;
-	double tdec_time = 0, frame_id = 0, total_time=0;
+	double frame_id = 0;
 	int decIndex = 0;
-	int rotid = 0, dblkid = 0, mirror;
-	int count = 0;
+	int rotid = 0, mirror;
 	int totalNumofErrMbs = 0;
-	int disp_clr_index = -1, actual_display_index = -1, field = V4L2_FIELD_NONE;
+	int disp_clr_index = -1, actual_display_index = -1;
 	int is_waited_int = 0;
 	int tiled2LinearEnable = 0;
-	int quitflag = 0;
 	char *delay_ms, *endptr;
 
 	memset(&outinfo, 0, sizeof(DecOutputInfo));

@@ -12,20 +12,16 @@
 
 /* Function prototypes */
 static int encoder_allocate_framebuffer(struct encoder_info *enc);
-static int encoder_configure(struct encoder_info *enc);
 static int encoder_get_headers(struct encoder_info *enc, struct mediaBuffer *enc_dst);
 static void encoder_close(struct encoder_info *enc);
-static int encoder_encode_frame(struct encoder_info *enc,
-				struct mediaBuffer *vid_src,
-				struct mediaBuffer *enc_dst);
 static void encoder_free_framebuffer(struct encoder_info *enc);
-static int encoder_open(struct encoder_info *enc, struct mediaBuffer *enc_dst);
+static int encoder_open(struct encoder_info *enc);
 static int read_source_frame(struct encoder_info *enc, struct mediaBuffer *vid_src);
 /* End function prototypes */
 
 int vpu_encoder_init(struct encoder_info *enc, struct mediaBuffer *enc_dst)
 {
-	int err, ret;
+	int ret;
 
 	/* get physical contigous bit stream buffer */
 	info_msg("Encoder: Allocating physical contigous bit stream buffer\n");
@@ -61,7 +57,7 @@ int vpu_encoder_init(struct encoder_info *enc, struct mediaBuffer *enc_dst)
 
 	/* open the encoder */
 	info_msg("Encoder: Opening the encoder\n");
-	ret = encoder_open(enc, enc_dst);
+	ret = encoder_open(enc);
 	if (ret)
 		return -1;
 
@@ -101,17 +97,11 @@ int vpu_encoder_encode_frame(struct encoder_info *enc, struct mediaBuffer *vid_s
 {
 	EncHandle handle = enc->handle;
 	EncParam enc_param;
-	EncOpenParam encop;
 	EncOutputInfo outinfo;
 	RetCode ret = 0;
-	int src_fbid = enc->src_fbid, frame_id = 0;
-	FrameBuffer *fb = enc->fb;
+	int src_fbid = enc->src_fbid;
 	int loop_id;
-	PhysicalAddress phy_bsbuf_start = enc->phy_bsbuf_addr;
-	u32 virt_bsbuf_start = enc->virt_bsbuf_addr;
-	u32 virt_bsbuf_end = virt_bsbuf_start + STREAM_BUF_SIZE;
 	unsigned char *vbuf;
-	int temp_size = 0;
 
 	/* Timer related variables */
 	struct timeval total_start, total_end;
@@ -192,7 +182,7 @@ int vpu_encoder_encode_frame(struct encoder_info *enc, struct mediaBuffer *vid_s
 	enc_dst->frameType = outinfo.picType;
 	enc_dst->bufOutSize = outinfo.bitstreamSize;
 	enc_dst->vBufOut = (unsigned char*)vbuf;
-	enc_dst->pBufOut = outinfo.bitstreamBuffer;
+	enc_dst->pBufOut = (unsigned char*)outinfo.bitstreamBuffer;
 	return 0;
 	
 	/* For now, we will always include headers with frame 
@@ -324,7 +314,7 @@ static void encoder_free_framebuffer(struct encoder_info *enc)
 	free(enc->pfbpool);
 }
 
-static int encoder_open(struct encoder_info *enc, struct mediaBuffer *enc_dst)
+static int encoder_open(struct encoder_info *enc)
 {
 	EncHandle handle;
 	EncOpenParam encop;
@@ -447,9 +437,11 @@ static void encoder_close(struct encoder_info *enc)
 
 static int encoder_get_headers(struct encoder_info *enc, struct mediaBuffer *enc_dst)
 {
-	EncHeaderParam enchdr_param = {0};
+	EncHeaderParam enchdr_param;
 	unsigned char *vbuf;
 	int temp_size = 0;
+
+	memset(&enchdr_param, 0, sizeof(EncHeaderParam));
 
 	/* Must put encode header before encoding */
 	enchdr_param.headerType = SPS_RBSP;
@@ -572,9 +564,9 @@ static int read_source_frame(struct encoder_info *enc, struct mediaBuffer *vid_s
 			}
 
 			/* Use g2d to dma the Y component to the VPU input buffer */
-			s_buf.buf_paddr = psrc_y;
+			s_buf.buf_paddr = (int)psrc_y;
 			s_buf.buf_vaddr = vsrc_y;
-			d_buf.buf_paddr = pdst_y;
+			d_buf.buf_paddr = (int)pdst_y;
 			d_buf.buf_vaddr = vdst_y;
 			g2d_copy(g2d_handle, &d_buf, &s_buf, y_size);
 			g2d_finish(g2d_handle);
@@ -611,9 +603,9 @@ static int read_source_frame(struct encoder_info *enc, struct mediaBuffer *vid_s
 			}
 
 			/* Use g2d to dma the whole buffer to the VPU input buffer */
-			s_buf.buf_paddr = psrc_y;
+			s_buf.buf_paddr = (int)psrc_y;
 			s_buf.buf_vaddr = vsrc_y;
-			d_buf.buf_paddr = pdst_y;
+			d_buf.buf_paddr = (int)pdst_y;
 			d_buf.buf_vaddr = vdst_y;
 			g2d_copy(g2d_handle, &d_buf, &s_buf, img_size);
 			g2d_finish(g2d_handle);

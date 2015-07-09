@@ -1,6 +1,10 @@
 #ifndef ENZO_CODEC_H
 #define ENZO_CODEC_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "enzo_utils.h"
 #include "vpu_decode.h"
 #include "vpu_encode.h"
@@ -158,5 +162,9 @@ int vpuInit(void);
 
    Return: 0 = success, -1 = failure */
 int vpuDeinit(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

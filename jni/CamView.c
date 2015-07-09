@@ -72,8 +72,21 @@ JNIEXPORT void JNICALL Java_com_example_enzocamtest_CamView_loadNextFrame(JNIEnv
 	y422_buf->buf_paddr = (unsigned char *)yuvData->pBufOut;
 	y422_buf->buf_vaddr = (unsigned char *)yuvData->vBufOut;
 
-	g2d_copy(g2d_handle, y420_buf, y422_buf, y_size *3/2);
+	g2d_copy(g2d_handle, y420_buf, y422_buf, y_size);
 	g2d_finish(g2d_handle);
+
+	unsigned char *u_src;
+	unsigned char *u_dst;
+	int i = 0;
+
+	u_src = y422_buf->buf_vaddr + y_size;
+	u_dst = y420_buf->buf_vaddr + y_size;
+	while (i < info.height) {
+		memcpy(u_dst, u_src, info.width);
+		u_dst += info.width;
+		u_src += info.width*2;
+		i += 2;
+	}
 
 	//info_msg("Converting frame to RGB565...\n");
 	g2d_blit(g2d_handle, &y420_surf, &rgb_surf);

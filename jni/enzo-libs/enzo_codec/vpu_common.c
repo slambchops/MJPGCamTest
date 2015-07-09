@@ -15,6 +15,8 @@ struct frame_buf *framebuf_alloc(int stdMode, int format, int strideY, int heigh
 	//	err_msg("Frame buffer get_framebuf failed\n");
 	//	return NULL;
 	//}
+	mvCol++;
+	stdMode++;
 
 	fb = calloc(1, sizeof(struct frame_buf));
 	if (fb == NULL) {
@@ -66,11 +68,11 @@ struct frame_buf *framebuf_alloc(int stdMode, int format, int strideY, int heigh
 
 void framebuf_init(void)
 {
-	int i;
+	//int i;
 
-	for (i = 0; i < NUM_FRAME_BUFS; i++) {
-		fbarray[i] = &fbpool[i];
-	}
+	//for (i = 0; i < NUM_FRAME_BUFS; i++) {
+	//	fbarray[i] = &fbpool[i];
+	//}
 }
 
 void framebuf_free(struct frame_buf *fb)
@@ -91,7 +93,7 @@ void framebuf_free(struct frame_buf *fb)
 	free(fb);
 }
 
-struct frame_buf *get_framebuf(void)
+/*struct frame_buf *get_framebuf(void)
 {
 	struct frame_buf *fb;
 
@@ -110,4 +112,4 @@ void put_framebuf(struct frame_buf *fb)
 	fb_index &= FB_INDEX_MASK;
 
 	fbarray[fb_index] = fb;
-}
+}*/

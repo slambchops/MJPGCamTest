@@ -1,6 +1,10 @@
 #ifndef ENZO_UTILS_H
 #define ENZO_UTILS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "vpu_common.h"
 
 #include <android/log.h>
@@ -93,5 +97,9 @@ int fwriten(int fd, void *vptr, size_t n);
 
 int mediaBufferInit(struct mediaBuffer *medBuf, int size);
 int mediaBufferDeinit(struct mediaBuffer *medBuf);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

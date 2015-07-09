@@ -1,6 +1,10 @@
 #ifndef VPU_DECODE_H
 #define VPU_DECODE_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "enzo_utils.h"
 #include "vpu_common.h"
 
@@ -55,5 +59,9 @@ int vpu_decoder_deinit(struct decoder_info *dec);
 int vpu_decoder_decode_frame(struct decoder_info *dec,
 			 struct mediaBuffer *enc_src,
 			 struct mediaBuffer *vid_dst);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

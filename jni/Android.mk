@@ -43,6 +43,6 @@ LOCAL_MODULE    := libcamview
 LOCAL_SRC_FILES := CamView.c
 LOCAL_SHARED_LIBRARIES := libvpu libg2d libenzocodec liblog libbinder libjnigraphics
 LOCAL_LDLIBS    := -llog -ljnigraphics
-LOCAL_CFLAGS += -std=c99
+LOCAL_CFLAGS += -std=c99 -Wall -Wextra
 
 include $(BUILD_SHARED_LIBRARY)
