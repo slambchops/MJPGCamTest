@@ -53,6 +53,13 @@ enum {
 	B_FRAME		= 2
 };
 
+/* Decoder return status */
+enum {
+	DEC_NEW_FRAME		= 0,
+	DEC_NO_NEW_FRAME	= -1,
+	DEC_ERROR		= -2
+};
+
 /* The mediaBuffer struct is used to share data between different components
    involved in encode, decode, display, and video processing. */
 struct mediaBuffer {

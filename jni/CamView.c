@@ -82,10 +82,10 @@ JNIEXPORT void JNICALL Java_com_example_enzocamtest_CamView_loadNextFrame(JNIEnv
 	u_src = y422_buf->buf_vaddr + y_size;
 	u_dst = y420_buf->buf_vaddr + y_size;
 	while (i < info.height) {
-		memcpy(u_dst, u_src, info.width);
-		u_dst += info.width;
-		u_src += info.width*2;
-		i += 2;
+		memcpy(u_dst, u_src, info.width/2);
+		u_dst += info.width/2;
+		u_src += info.width;
+		i++;
 	}
 
 	//info_msg("Converting frame to RGB565...\n");

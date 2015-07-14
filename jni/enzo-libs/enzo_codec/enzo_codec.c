@@ -71,11 +71,7 @@ int decoderDecodeFrame( struct decoderInstance *decInst,
 	   it is fixed */
 	vid_dst->dataType = RAW_VIDEO;
 	vid_dst->dataSource = VPU_CODEC;
-	if (vpu_decoder_decode_frame(dec, enc_src, vid_dst) < 0)
-		return -1;
-	else
-		return 0;
-	return 0;
+	return vpu_decoder_decode_frame(dec, enc_src, vid_dst);
 }
 
 int cameraInit(struct cameraInstance *camInst)

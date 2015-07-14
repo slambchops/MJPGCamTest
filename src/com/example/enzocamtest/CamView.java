@@ -69,7 +69,7 @@ public class CamView extends SurfaceView implements SurfaceHolder.Callback, Runn
     	
     	while(mRunning) {
     	
-	    	loadNextFrame(mLocalCamBitmap);
+	    	//loadNextFrame(mLocalCamBitmap);
 	    	loadNextFrame(mRemoteCamBitmap);
 	    	
 	        mCanvas = mHolder.lockCanvas();

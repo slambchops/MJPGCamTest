@@ -482,7 +482,10 @@ static int dec_fill_bsbuffer(DecHandle handle, struct mediaBuffer *enc_src,
 
 	/* Make sure that we only write the actual size of a camera frame
 	   to the VPU */
-	if (enc_src->dataSource == V4L2_CAM || enc_src->dataSource == VPU_CODEC) {
+	if (enc_src->dataSource == V4L2_CAM ||
+	    enc_src->dataSource == VPU_CODEC ||
+	    enc_src->dataSource == BUFFER)
+	{
 		defaultsize = enc_src->bufOutSize;
 	}
 
@@ -524,7 +527,7 @@ static int dec_fill_bsbuffer(DecHandle handle, struct mediaBuffer *enc_src,
 			nread = freadn(enc_src->fd, (void *)target_addr, room);
 			if (nread <= 0) {
 				/* EOF or error */
-				err_msg("Decoder: EOF or error\n");
+				//err_msg("Decoder: EOF or error\n");
 				if (nread < 0) {
 					if (nread == -EAGAIN)
 						return 0;
@@ -559,7 +562,10 @@ static int dec_fill_bsbuffer(DecHandle handle, struct mediaBuffer *enc_src,
 
 				nread += space;
 			}
-		} else if (enc_src->dataSource == V4L2_CAM || enc_src->dataSource == VPU_CODEC) {
+		} else 	if (enc_src->dataSource == V4L2_CAM ||
+			    enc_src->dataSource == VPU_CODEC ||
+			    enc_src->dataSource == BUFFER)
+			{
 			/* A point has been reached where the remaining space
 			   in the ring buffer is not enough to fit a full 
 			   camera frame */
@@ -584,7 +590,10 @@ static int dec_fill_bsbuffer(DecHandle handle, struct mediaBuffer *enc_src,
 		if (enc_src->dataSource == FILE_SRC) {
 			nread = freadn(enc_src->fd, (void *)target_addr, size);
 		}
-		else if (enc_src->dataSource == V4L2_CAM || enc_src->dataSource == VPU_CODEC) {
+		else if (enc_src->dataSource == V4L2_CAM ||
+			 enc_src->dataSource == VPU_CODEC ||
+			 enc_src->dataSource == BUFFER)
+		{
 			memcpy((char *)target_addr, enc_src->vBufOut, size);
 			nread = size;
 		}
@@ -593,7 +602,7 @@ static int dec_fill_bsbuffer(DecHandle handle, struct mediaBuffer *enc_src,
 		}
 		if (nread <= 0) {
 			/* EOF or error */
-			err_msg("Decoder: EOF or error\n");
+			//err_msg("Decoder: EOF or error\n");
 			if (nread < 0) {
 				if (nread == -EAGAIN)
 					return 0;
@@ -654,73 +663,11 @@ static int decoder_decode_frame(struct decoder_info *dec, struct mediaBuffer *en
 	int is_waited_int = 0;
 	int tiled2LinearEnable = 0;
 	char *delay_ms, *endptr;
+	int return_code = 0;
+	int param_change_loop = 0;
 
 	memset(&outinfo, 0, sizeof(DecOutputInfo));
 	memset(&decparam, 0, sizeof(DecParam));
-
-	disp_clr_index = dec->disp_clr_index;
-
-	if (dec->format == MJPEG)
-		rotid = 0;
-
-	decparam.dispReorderBuf = 0;
-
-	decparam.skipframeMode = 0;
-	decparam.skipframeNum = 0;
-	/*
-	 * once iframeSearchEnable is enabled, prescanEnable, prescanMode
-	 * and skipframeMode options are ignored.
-	 */
-	decparam.iframeSearchEnable = 0;
-
-	fwidth = ((dec->picwidth + 15) & ~15);
-	fheight = ((dec->picheight + 15) & ~15);
-
-	if (rot_en || dering_en || tiled2LinearEnable || (dec->format == MJPEG)) {
-		/*
-		 * VPU is setting the rotation angle by counter-clockwise.
-		 * We convert it to clockwise, which is consistent with V4L2
-		 * rotation angle strategy.
-		 */
-		if (rot_en) {
-			if (rot_angle == 90 || rot_angle == 270)
-				rot_angle = 360 - rot_angle;
-		} else
-			rot_angle = 0;
-
-		vpu_DecGiveCommand(handle, SET_ROTATION_ANGLE,
-					&rot_angle);
-
-		mirror = 0;
-		vpu_DecGiveCommand(handle, SET_MIRROR_DIRECTION,
-					&mirror);
-
-		if (rot_en)
-			rot_stride = (rot_angle == 90 || rot_angle == 270) ?
-					fheight : fwidth;
-		else
-			rot_stride = fwidth;
-		vpu_DecGiveCommand(handle, SET_ROTATOR_STRIDE, &rot_stride);
-	}
-
-	img_size = dec->picwidth * dec->picheight * 3 / 2;
-
-	if (rot_en || dering_en || tiled2LinearEnable || (dec->format == MJPEG)) {
-		vpu_DecGiveCommand(handle, SET_ROTATOR_OUTPUT,
-					(void *)&fb[rotid]);
-		if (frame_id == 0) {
-			if (rot_en) {
-				vpu_DecGiveCommand(handle,
-						ENABLE_ROTATION, 0);
-				vpu_DecGiveCommand(handle,
-						ENABLE_MIRRORING,0);
-			}
-			if (dering_en) {
-				vpu_DecGiveCommand(handle,
-						ENABLE_DERING, 0);
-			}
-		}
-	}
 
 	/*
 	 * For mx6x MJPG decoding with streaming mode
@@ -738,200 +685,276 @@ static int decoder_decode_frame(struct decoder_info *dec, struct mediaBuffer *en
 		    &eos, &fill_end_bs);
 	if (err < 0) {
 		err_msg("Decoder: dec_fill_bsbuffer failed\n");
-		return -1;
+		return DEC_ERROR;
 	}
 
-	ret = vpu_DecStartOneFrame(handle, &decparam);
-	if (ret == RETCODE_JPEG_EOS) {
-		info_msg("Decoder: JPEG bitstream is end\n");
-		return -1;
-	} else if (ret == RETCODE_JPEG_BIT_EMPTY) {
-		err = dec_fill_bsbuffer(handle, enc_src,
-			    dec->virt_bsbuf_addr,
-			    (dec->virt_bsbuf_addr + STREAM_BUF_SIZE),
-			    dec->phy_bsbuf_addr, STREAM_FILL_SIZE,
-			    &eos, &fill_end_bs);
-		if (err < 0) {
-			err_msg("Decoder: dec_fill_bsbuffer failed\n");
-			return -1;
+	while (param_change_loop < 1000) {
+
+		param_change_loop = false;
+		disp_clr_index = dec->disp_clr_index;
+
+		if (dec->format == MJPEG)
+			rotid = 0;
+
+		decparam.dispReorderBuf = 0;
+
+		decparam.skipframeMode = 0;
+		decparam.skipframeNum = 0;
+		/*
+		 * once iframeSearchEnable is enabled, prescanEnable, prescanMode
+		 * and skipframeMode options are ignored.
+		 */
+		decparam.iframeSearchEnable = 0;
+
+		fwidth = ((dec->picwidth + 15) & ~15);
+		fheight = ((dec->picheight + 15) & ~15);
+
+		if (rot_en || dering_en || tiled2LinearEnable || (dec->format == MJPEG)) {
+			/*
+			 * VPU is setting the rotation angle by counter-clockwise.
+			 * We convert it to clockwise, which is consistent with V4L2
+			 * rotation angle strategy.
+			 */
+			if (rot_en) {
+				if (rot_angle == 90 || rot_angle == 270)
+					rot_angle = 360 - rot_angle;
+			} else
+				rot_angle = 0;
+
+			vpu_DecGiveCommand(handle, SET_ROTATION_ANGLE,
+						&rot_angle);
+
+			mirror = 0;
+			vpu_DecGiveCommand(handle, SET_MIRROR_DIRECTION,
+						&mirror);
+
+			if (rot_en)
+				rot_stride = (rot_angle == 90 || rot_angle == 270) ?
+						fheight : fwidth;
+			else
+				rot_stride = fwidth;
+			vpu_DecGiveCommand(handle, SET_ROTATOR_STRIDE, &rot_stride);
 		}
-	}
 
-	if (ret != RETCODE_SUCCESS) {
-		err_msg("Decoder: DecStartOneFrame failed, ret=%d\n", ret);
-		return -1;
-	}
+		img_size = dec->picwidth * dec->picheight * 3 / 2;
 
-	is_waited_int = 0;
-	loop_id = 0;
-	while (vpu_IsBusy()) {
-		if (dec->format != MJPEG) {
-			//Avoid doing this for now. Fill buffer beginning of sequence instead.
-			/*err = dec_fill_bsbuffer(handle, enc_src,
+		if (rot_en || dering_en || tiled2LinearEnable || (dec->format == MJPEG)) {
+			vpu_DecGiveCommand(handle, SET_ROTATOR_OUTPUT,
+						(void *)&fb[rotid]);
+			if (frame_id == 0) {
+				if (rot_en) {
+					vpu_DecGiveCommand(handle,
+							ENABLE_ROTATION, 0);
+					vpu_DecGiveCommand(handle,
+							ENABLE_MIRRORING,0);
+				}
+				if (dering_en) {
+					vpu_DecGiveCommand(handle,
+							ENABLE_DERING, 0);
+				}
+			}
+		}
+
+		ret = vpu_DecStartOneFrame(handle, &decparam);
+		if (ret == RETCODE_JPEG_EOS) {
+			info_msg("Decoder: JPEG bitstream is end\n");
+			return DEC_ERROR;
+		} else if (ret == RETCODE_JPEG_BIT_EMPTY) {
+			err = dec_fill_bsbuffer(handle, enc_src,
 				    dec->virt_bsbuf_addr,
 				    (dec->virt_bsbuf_addr + STREAM_BUF_SIZE),
 				    dec->phy_bsbuf_addr, STREAM_FILL_SIZE,
 				    &eos, &fill_end_bs);
 			if (err < 0) {
 				err_msg("Decoder: dec_fill_bsbuffer failed\n");
-				return -1;
-			}*/
-		}
-		/*
-		 * Suppose vpu is hang if one frame cannot be decoded in 5s,
-		 * then do vpu software reset.
-		 * Please take care of this for network case since vpu
-		 * interrupt also cannot be received if no enough data.
-		 */
-		if (loop_id == 50) {
-			err = vpu_SWReset(handle, 0);
-			return -1;
+				return DEC_ERROR;
+			}
 		}
 
-		vpu_WaitForInt(100);
-		is_waited_int = 1;
-		loop_id ++;
-	}
-
-	if (!is_waited_int)
-		vpu_WaitForInt(100);
-
-	ret = vpu_DecGetOutputInfo(handle, &outinfo);
-
-	/* In 8 instances test, we found some instance(s) may not get a chance to be scheduled
-	 * until timeout, so we yield schedule each frame explicitly.
-	 * This may be kernel dependant and may be removed on customer platform */
-	usleep(0);
-
-	if ((dec->format == MJPEG) &&
-	    (outinfo.indexFrameDisplay == 0)) {
-		outinfo.indexFrameDisplay = rotid;
-	}
-
-	if (ret != RETCODE_SUCCESS) {
-		err_msg("Decoder: vpu_DecGetOutputInfo failed Err code is %d\n"
-			"\tframe_id = %d\n", ret, (int)frame_id);
-		return -1;
-	}
-
-	if (outinfo.decodingSuccess == 0) {
-		warn_msg("Decoder: Incomplete finish of decoding process.\n");
-		if ((outinfo.indexFrameDecoded >= 0) && (outinfo.numOfErrMBs)) {
-			if (enc_src->dataType == MJPEG)
-				info_msg("Decoder: Error Mb info:0x%x,\n",
-					outinfo.numOfErrMBs);
-		}
-	}
-
-	if (outinfo.decodingSuccess & 0x10) {
-		warn_msg("Decoder: vpu needs more bitstream in rollback mode\n");
-
-		/* Don't think buffer should fill here since frames are being taken
-		   one at a time */
-		/*err = dec_fill_bsbuffer(handle,  enc_src, dec->virt_bsbuf_addr,
-				(dec->virt_bsbuf_addr + STREAM_BUF_SIZE),
-				dec->phy_bsbuf_addr, 0, &eos, &fill_end_bs);*/
-		if (err < 0) {
-			err_msg("Decoder: dec_fill_bsbuffer failed\n");
-			return -1;
-		}
-	}
-
-	if (outinfo.notSufficientPsBuffer) {
-		err_msg("Decoder: PS Buffer overflow\n");
-		return -1;
-	}
-
-	if (outinfo.notSufficientSliceBuffer) {
-		err_msg("Decoder: Slice Buffer overflow\n");
-		return -1;
-	}
-
-	if (outinfo.indexFrameDisplay == -1)
-		return -1;
-	else if ((outinfo.indexFrameDisplay > dec->regfbcount) &&
-		 (outinfo.prescanresult != 0) && !cpu_is_mx6x())
-		decodefinish = 1;
-
-	if (decodefinish && (!(rot_en || dering_en || tiled2LinearEnable)))
-		return 0;
-
-	if(outinfo.indexFrameDecoded >= 0) {
-		/* We MUST be careful of sequence param change (resolution change, etc)
-		 * Different frame buffer number or resolution may require vpu_DecClose
-		 * and vpu_DecOpen again to reallocate sufficient resources.
-		 * If you already allocate enough frame buffers of max resolution
-		 * in the beginning, you may not need vpu_DecClose, etc. But sequence
-		 * headers must be ahead of their pictures to signal param change.
-		 */
-		if ((outinfo.decPicWidth != dec->lastPicWidth)
-				||(outinfo.decPicHeight != dec->lastPicHeight)) {
-			warn_msg("Decoder: resolution changed from %dx%d to %dx%d\n",
-					dec->lastPicWidth, dec->lastPicHeight,
-					outinfo.decPicWidth, outinfo.decPicHeight);
-			dec->lastPicWidth = outinfo.decPicWidth;
-			dec->lastPicHeight = outinfo.decPicHeight;
+		if (ret != RETCODE_SUCCESS) {
+			err_msg("Decoder: DecStartOneFrame failed, ret=%d\n", ret);
+			return DEC_ERROR;
 		}
 
-		if (outinfo.numOfErrMBs) {
-			totalNumofErrMbs += outinfo.numOfErrMBs;
-			info_msg("Decoder: Num of Error Mbs : %d\n",
-					outinfo.numOfErrMBs);
+		is_waited_int = 0;
+		loop_id = 0;
+		while (vpu_IsBusy()) {
+			if (dec->format != MJPEG) {
+				//Avoid doing this for now. Fill buffer beginning of sequence instead.
+				/*err = dec_fill_bsbuffer(handle, enc_src,
+					    dec->virt_bsbuf_addr,
+					    (dec->virt_bsbuf_addr + STREAM_BUF_SIZE),
+					    dec->phy_bsbuf_addr, STREAM_FILL_SIZE,
+					    &eos, &fill_end_bs);
+				if (err < 0) {
+					err_msg("Decoder: dec_fill_bsbuffer failed\n");
+					return -1;
+				}*/
+			}
+			/*
+			 * Suppose vpu is hang if one frame cannot be decoded in 5s,
+			 * then do vpu software reset.
+			 * Please take care of this for network case since vpu
+			 * interrupt also cannot be received if no enough data.
+			 */
+			if (loop_id == 50) {
+				err = vpu_SWReset(handle, 0);
+				return DEC_ERROR;
+			}
+
+			vpu_WaitForInt(100);
+			is_waited_int = 1;
+			loop_id ++;
 		}
-	}
 
-	if(outinfo.indexFrameDecoded >= 0)
-		decIndex++;
+		if (!is_waited_int)
+			vpu_WaitForInt(100);
 
-	/* BIT don't have picture to be displayed */
-	if ((outinfo.indexFrameDisplay == -3) ||
-			(outinfo.indexFrameDisplay == -2)) {
-		err_msg("Decoder: VPU doesn't have picture to be displayed.\n"
-			"\toutinfo.indexFrameDisplay = %d\n",
-					outinfo.indexFrameDisplay);
+		ret = vpu_DecGetOutputInfo(handle, &outinfo);
 
-		if (enc_src->dataType != MJPEG && disp_clr_index >= 0) {
-			err = vpu_DecClrDispFlag(handle, disp_clr_index);
+		/* In 8 instances test, we found some instance(s) may not get a chance to be scheduled
+		 * until timeout, so we yield schedule each frame explicitly.
+		 * This may be kernel dependant and may be removed on customer platform */
+		usleep(0);
+
+		if ((dec->format == MJPEG) &&
+		    (outinfo.indexFrameDisplay == 0)) {
+			outinfo.indexFrameDisplay = rotid;
+		}
+
+		if (ret != RETCODE_SUCCESS) {
+			err_msg("Decoder: vpu_DecGetOutputInfo failed Err code is %d\n"
+				"\tframe_id = %d\n", ret, (int)frame_id);
+			return DEC_ERROR;
+		}
+
+		if (outinfo.decodingSuccess == 0) {
+			//warn_msg("Decoder: Incomplete finish of decoding process.\n");
+			if ((outinfo.indexFrameDecoded >= 0) && (outinfo.numOfErrMBs)) {
+				if (enc_src->dataType == MJPEG)
+					info_msg("Decoder: Error Mb info:0x%x,\n",
+						outinfo.numOfErrMBs);
+			}
+		}
+
+		if (outinfo.decodingSuccess & 0x10) {
+			warn_msg("Decoder: vpu needs more bitstream in rollback mode\n");
+
+			/* Don't think buffer should fill here since frames are being taken
+			   one at a time */
+			/*err = dec_fill_bsbuffer(handle,  enc_src, dec->virt_bsbuf_addr,
+					(dec->virt_bsbuf_addr + STREAM_BUF_SIZE),
+					dec->phy_bsbuf_addr, 0, &eos, &fill_end_bs);*/
+			if (err < 0) {
+				err_msg("Decoder: dec_fill_bsbuffer failed\n");
+				return DEC_ERROR;
+			}
+		}
+
+		if (outinfo.notSufficientPsBuffer) {
+			err_msg("Decoder: PS Buffer overflow\n");
+			return DEC_ERROR;
+		}
+
+		if (outinfo.notSufficientSliceBuffer) {
+			err_msg("Decoder: Slice Buffer overflow\n");
+			return DEC_ERROR;
+		}
+
+		if (outinfo.indexFrameDisplay == -1)
+			return DEC_ERROR;
+		else if ((outinfo.indexFrameDisplay > dec->regfbcount) &&
+			 (outinfo.prescanresult != 0) && !cpu_is_mx6x())
+			decodefinish = 1;
+
+		if (decodefinish && (!(rot_en || dering_en || tiled2LinearEnable)))
+			return DEC_NEW_FRAME;
+
+		if(outinfo.indexFrameDecoded >= 0) {
+			/* We MUST be careful of sequence param change (resolution change, etc)
+			 * Different frame buffer number or resolution may require vpu_DecClose
+			 * and vpu_DecOpen again to reallocate sufficient resources.
+			 * If you already allocate enough frame buffers of max resolution
+			 * in the beginning, you may not need vpu_DecClose, etc. But sequence
+			 * headers must be ahead of their pictures to signal param change.
+			 */
+			if ((outinfo.decPicWidth != dec->lastPicWidth)
+					||(outinfo.decPicHeight != dec->lastPicHeight)) {
+				warn_msg("Decoder: resolution changed from %dx%d to %dx%d\n",
+						dec->lastPicWidth, dec->lastPicHeight,
+						outinfo.decPicWidth, outinfo.decPicHeight);
+				dec->lastPicWidth = outinfo.decPicWidth;
+				dec->lastPicHeight = outinfo.decPicHeight;
+			}
+
+			if (outinfo.numOfErrMBs) {
+				totalNumofErrMbs += outinfo.numOfErrMBs;
+				info_msg("Decoder: Num of Error Mbs : %d\n",
+						outinfo.numOfErrMBs);
+			}
+		}
+
+		if(outinfo.indexFrameDecoded >= 0)
+			decIndex++;
+
+		/* BIT don't have picture to be displayed */
+		if ((outinfo.indexFrameDisplay == -3) ||
+				(outinfo.indexFrameDisplay == -2)) {
+			//err_msg("Decoder: VPU doesn't have picture to be displayed.\n"
+			//	"\toutinfo.indexFrameDisplay = %d\n",
+			//			outinfo.indexFrameDisplay);
+
+			if (enc_src->dataType != MJPEG && disp_clr_index >= 0) {
+				err = vpu_DecClrDispFlag(handle, disp_clr_index);
+				if (err)
+					err_msg("Decoder: vpu_DecClrDispFlag failed Error code"
+							" %d\n", err);
+			}
+			disp_clr_index = outinfo.indexFrameDisplay;
+			return_code = DEC_NO_NEW_FRAME;
+			param_change_loop++;
+			continue;
+		}
+
+		if (rot_en || dering_en || tiled2LinearEnable || (dec->format == MJPEG)) {
+			/* delay one more frame for PP */
+			if ((dec->format != MJPEG) && (disp_clr_index < 0)) {
+				disp_clr_index = outinfo.indexFrameDisplay;
+			}
+			actual_display_index = rotid;
+		}
+		else
+			actual_display_index = outinfo.indexFrameDisplay;
+
+		if (outinfo.indexFrameDisplay >= 0) {
+			write_to_dst(dec, vid_dst, actual_display_index);
+		} else {
+			//warn_msg("Decoder: no new frame to output\n");
+			return_code = DEC_NO_NEW_FRAME;
+		}
+
+		if (dec->format != MJPEG && disp_clr_index >= 0) {
+			err = vpu_DecClrDispFlag(handle,disp_clr_index);
 			if (err)
 				err_msg("Decoder: vpu_DecClrDispFlag failed Error code"
-						" %d\n", err);
+					" %d\n", err);
 		}
-		disp_clr_index = outinfo.indexFrameDisplay;
-	}
+		dec->disp_clr_index = outinfo.indexFrameDisplay;
 
-	if (rot_en || dering_en || tiled2LinearEnable || (dec->format == MJPEG)) {
-		/* delay one more frame for PP */
-		if ((dec->format != MJPEG) && (disp_clr_index < 0)) {
-			disp_clr_index = outinfo.indexFrameDisplay;
+		delay_ms = getenv("VPU_DECODER_DELAY_MS");
+		if (delay_ms && strtol(delay_ms, &endptr, 10))
+			usleep(strtol(delay_ms,&endptr, 10) * 1000);
+
+		if (totalNumofErrMbs) {
+			info_msg("Decoder: Total Num of Error MBs : %d\n",
+				totalNumofErrMbs);
 		}
-		actual_display_index = rotid;
-	}
-	else
-		actual_display_index = outinfo.indexFrameDisplay;
 
-	if (outinfo.indexFrameDisplay >= 0) {
-		write_to_dst(dec, vid_dst, actual_display_index);
-	} else
-		warn_msg("Decoder: no new frame to output\n");
-
-	if (dec->format != MJPEG && disp_clr_index >= 0) {
-		err = vpu_DecClrDispFlag(handle,disp_clr_index);
-		if (err)
-			err_msg("Decoder: vpu_DecClrDispFlag failed Error code"
-				" %d\n", err);
-	}
-	dec->disp_clr_index = outinfo.indexFrameDisplay;
-
-	delay_ms = getenv("VPU_DECODER_DELAY_MS");
-	if (delay_ms && strtol(delay_ms, &endptr, 10))
-		usleep(strtol(delay_ms,&endptr, 10) * 1000);
-
-	if (totalNumofErrMbs) {
-		info_msg("Decoder: Total Num of Error MBs : %d\n",
-			totalNumofErrMbs);
+		/* If we get here, we don't need to loop */
+		break;
 	}
 
-	return 0;
+	return return_code;
 }
 
 /*
