@@ -8,6 +8,12 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+/*When AVC data has parameter change, the VPU decode frame function needs
+ *to iterate a few hundred times. I'm not sure why this is, but it needs to
+ *happen. This loop count is to set a limit on how many times we loop through
+ * decode one frame when param change occurs. */
+#define AVC_PARAM_LOOP_MAX	1000
+
 /* Function prototypes */
 static int decoder_open(struct decoder_info *dec, struct mediaBuffer *enc_src);
 static void decoder_close(struct decoder_info *dec);
@@ -688,7 +694,7 @@ static int decoder_decode_frame(struct decoder_info *dec, struct mediaBuffer *en
 		return DEC_ERROR;
 	}
 
-	while (param_change_loop < 1000) {
+	while (param_change_loop < AVC_PARAM_LOOP_MAX) {
 
 		param_change_loop = false;
 		disp_clr_index = dec->disp_clr_index;
@@ -837,19 +843,19 @@ static int decoder_decode_frame(struct decoder_info *dec, struct mediaBuffer *en
 			}
 		}
 
-		if (outinfo.decodingSuccess & 0x10) {
+		/*if (outinfo.decodingSuccess & 0x10) {
 			warn_msg("Decoder: vpu needs more bitstream in rollback mode\n");
 
-			/* Don't think buffer should fill here since frames are being taken
-			   one at a time */
-			/*err = dec_fill_bsbuffer(handle,  enc_src, dec->virt_bsbuf_addr,
+			// Don't think buffer should fill here since frames are being taken
+			//   one at a time
+			err = dec_fill_bsbuffer(handle,  enc_src, dec->virt_bsbuf_addr,
 					(dec->virt_bsbuf_addr + STREAM_BUF_SIZE),
-					dec->phy_bsbuf_addr, 0, &eos, &fill_end_bs);*/
+					dec->phy_bsbuf_addr, 0, &eos, &fill_end_bs);
 			if (err < 0) {
 				err_msg("Decoder: dec_fill_bsbuffer failed\n");
 				return DEC_ERROR;
 			}
-		}
+		}*/
 
 		if (outinfo.notSufficientPsBuffer) {
 			err_msg("Decoder: PS Buffer overflow\n");
@@ -950,7 +956,11 @@ static int decoder_decode_frame(struct decoder_info *dec, struct mediaBuffer *en
 				totalNumofErrMbs);
 		}
 
-		/* If we get here, we don't need to loop */
+		/* If we get here, we don't need to loop. Looping will only
+		 * when the parameters of the encoded data have changed. For
+		 * some reason, the VPU decode loop needs to iterate a few
+		 * hundred times before it resumes normal operation after a
+		 * parameter change occurs. */
 		break;
 	}
 
@@ -968,7 +978,7 @@ static void write_to_dst(struct decoder_info *dec,
 	int height = (dec->picheight + 15) & ~15 ;
 	int stride = dec->stride;
 	int img_size;
-	u8 *pYuv = NULL, *pYuv0 = NULL, *buf;
+	u8 *buf;
 	struct frame_buf *pfb = NULL;
 
 	pfb = dec->pfbpool[index];
@@ -990,14 +1000,12 @@ static void write_to_dst(struct decoder_info *dec,
 			vid_dst->colorSpace = NV12;
 		vid_dst->dataSource = VPU_CODEC;
 		vid_dst->bufOutSize = img_size;
+		vid_dst->height = dec->picheight;
+		vid_dst->width = dec->picwidth;
+		vid_dst->imageHeight = dec->lastPicHeight;
+		vid_dst->imageWidth = dec->lastPicWidth;
 		vid_dst->vBufOut = (unsigned char *)buf;
 		vid_dst->pBufOut = (unsigned char *)pfb->addrY;
-	}
-
-	if (pYuv0) {
-		free(pYuv0);
-		pYuv0 = NULL;
-		pYuv = NULL;
 	}
 
 	return;

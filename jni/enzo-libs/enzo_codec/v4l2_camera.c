@@ -49,9 +49,10 @@ static int v4l2_init_device(struct camera_info *device)
 	param.parm.capture.timeperframe.denominator = device->fps;
 	ret = ioctl(device->fd, VIDIOC_S_PARM, &param);
 	if (ret < 0) {
-		warn_msg("%s: Could not set FPS\n", device->name);
-	}	
-	info_msg("%s: FPS set to %d\n", device->name, device->fps);
+		err_msg("%s: Could not set FPS\n", device->name);
+		goto ERROR;
+	} else
+		info_msg("%s: FPS set to %d\n", device->name, device->fps);
 
 	reqbuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	temp_fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -370,6 +371,10 @@ int v4l2_cameraGetFrame(struct camera_info *camera, struct mediaBuffer *cam_src)
 	cam_src->bufOutSize = camera->buf.bytesused;
 	cam_src->vBufOut = camera->buffers[index].start;
 	cam_src->pBufOut = NULL;
+	cam_src->height = camera->height;
+	cam_src->width = camera->width;
+	cam_src->imageHeight = camera->height;
+	cam_src->imageWidth = camera->width;
 
 	if (camera->type == RAW_VIDEO)
 		cam_src->colorSpace = YUYV;

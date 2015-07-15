@@ -468,6 +468,10 @@ static int encoder_get_headers(struct encoder_info *enc, struct mediaBuffer *enc
 
 	enc_dst->dataSource = VPU_CODEC;
 	enc_dst->bufOutSize = temp_size;
+	enc_dst->height = enc->enc_picheight;
+	enc_dst->width = enc->enc_picwidth;
+	enc_dst->imageHeight = enc->enc_picheight;
+	enc_dst->imageWidth = enc->enc_picwidth;
 	enc_dst->vBufOut = (unsigned char*)enc->virt_outbuf_addr;
 	enc_dst->pBufOut = (unsigned char*)enc->phy_outbuf_addr;
 

@@ -63,38 +63,63 @@ enum {
 /* The mediaBuffer struct is used to share data between different components
    involved in encode, decode, display, and video processing. */
 struct mediaBuffer {
+
+	int dataType;
 	/* Specifies the format of the data in the buffer.
 	   For example, is it raw data from a camera or 
 	   encoded data from an encoder block. */
-	int dataType;
+
+	int dataSource;
 	/* The source of the data; was it produced by the
 	   encoder block, or from a v4l2 camera, etc... */
-	int dataSource;
+
+	int colorSpace;
 	/* The color space of the data payload. This mainly
 	   applies to raw video, but in some cases it may be
 	   useful to know the color space of encoded data. */
-	int colorSpace;
+
 	int width;
+	/* Width of the entire video buffer. This may or may not be
+	   the actual width of the image contained in the buffer */
+
 	int height;
+	/* Height of the entire video buffer. This may or may not be
+	   the actual height of the image contained in the buffer */
+
+	int imageWidth;
+	/* This is the width of the image contained in the media buffer.
+	   Most of the time, this will equal the width of the entire buffer. */
+
+	int imageHeight;
+	/* This is the height of the image contained in the media buffer.
+	   Most of the time, this will equal the height of the entire
+	   buffer. */
+
+	int frameType;
 	/* This indicates whether the frame is I, P, or B frame.
 	   0 = I frame
 	   1 = P frame
 	   2 = B frame */
-	int frameType;
+
+	int fd;
 	/* The file descriptor (if the data is coming from a file */
-	int fd;		
+
+	int bufOutSize;
 	/* The size of the data pointed to by bufOut. This
 	   value is only valid AFTER a component has put
 	   data into the mediaBuffer. */
-	int bufOutSize;
+
+	unsigned char *vBufOut;
 	/* Virtual pointer to the data the media component has
 	   finished processing. The media component is 
 	   responsible for allocating its own memory,
 	   and will only supply the address of that data
 	   in the bufOut pointer. Data should NEVER be
 	   written to this address; it is read only. */
-	unsigned char *vBufOut;
+
 	unsigned char *pBufOut;
+	/* Physical address of data. Not all processes will produce
+	   physically contiguous buffers, so this pointer may be NULL */
 
 	vpu_mem_desc desc;
 };
