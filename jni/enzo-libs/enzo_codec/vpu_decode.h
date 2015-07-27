@@ -48,6 +48,8 @@ struct decoder_info {
 	int lastPicWidth;
 	int lastPicHeight;
 
+	char decoder_name[12];
+
 	DecReportInfo mbInfo;
 	DecReportInfo mvInfo;
 	DecReportInfo frameBufStat;

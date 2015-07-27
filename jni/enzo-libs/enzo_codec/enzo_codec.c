@@ -15,6 +15,12 @@ int encoderInit(struct encoderInstance *encInst, struct mediaBuffer *enc_dst)
 	enc->enc_bit_rate = encInst->bitRate;
 	enc->gop_size = encInst->gopSize;
 	enc->color_space = encInst->colorSpace;
+
+	if (strcmp(encInst->encoderName, "") == 0)
+		strcpy(enc->encoder_name,"Encoder");
+	else
+		strcpy(enc->encoder_name,encInst->encoderName);
+
 	if (vpu_encoder_init(enc, enc_dst) < 0)
 		return -1;
 	else
@@ -42,13 +48,18 @@ int encoderEncodeFrame( struct encoderInstance *encInst,
 	enc->force_i_frame = encInst->forceIFrame;
 	if (vpu_encoder_encode_frame(enc, vid_src, enc_dst) < 0)
 		return -1;
-	else
+	else {
 		return 0;
+	}
 }
 
 int decoderInit(struct decoderInstance *decInst, struct mediaBuffer *enc_src) {
 	struct decoder_info *dec = &decInst->dec;
 	dec->format = decInst->type;
+	if (strcmp(decInst->decoderName, "") == 0)
+		strcpy(dec->decoder_name, "Decoder");
+	else
+		strcpy(dec->decoder_name, decInst->decoderName);
 	if (vpu_decoder_init(dec, enc_src) < 0)
 		return -1;
 	else
@@ -142,12 +153,15 @@ int vpuInit(void)
 	info_msg("VPU: Init framebuffer pool\n");
 	framebuf_init();
 
+	info_msg("VPU was successfully initialized\n\n");
+
 	return 0;
 }
 
 int vpuDeinit(void)
 {
 	vpu_UnInit();
+	info_msg("VPU was deinitialized\n\n");
 	return 0;
 }
 

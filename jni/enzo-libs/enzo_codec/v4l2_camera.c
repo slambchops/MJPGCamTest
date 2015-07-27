@@ -134,7 +134,6 @@ static int v4l2_init_device(struct camera_info *device)
 
 	device->buffers = temp_buffers;
 
-	info_msg("%s: Init done successfully\n", device->name);
 	return 0;
 
 ERROR1:
@@ -329,6 +328,8 @@ int v4l2_cameraInit(struct camera_info *camera)
 	 * to framebuffer */
 	v4l2_dequeue_buffer(camera);
 
+	info_msg("%s: Init done successfully\n\n", camera->name);
+
 	return 0;
 
 Error:
@@ -348,6 +349,8 @@ int v4l2_cameraDeinit(struct camera_info *camera)
 		v4l2_stream_off(camera);
 		v4l2_exit_device(camera);
 	}
+
+	info_msg("%s: camera was deinitialized\n\n", camera->name);
 
 	return 0;
 }

@@ -17,6 +17,7 @@ static void encoder_close(struct encoder_info *enc);
 static void encoder_free_framebuffer(struct encoder_info *enc);
 static int encoder_open(struct encoder_info *enc);
 static int read_source_frame(struct encoder_info *enc, struct mediaBuffer *vid_src);
+static void SaveEncSliceInfo(u8 *SliceParaBuf, int size, struct nalInfoStruct *nalInfo);
 /* End function prototypes */
 
 int vpu_encoder_init(struct encoder_info *enc, struct mediaBuffer *enc_dst)
@@ -24,30 +25,36 @@ int vpu_encoder_init(struct encoder_info *enc, struct mediaBuffer *enc_dst)
 	int ret;
 
 	/* get physical contigous bit stream buffer */
-	info_msg("Encoder: Allocating physical contigous bit stream buffer\n");
+	info_msg("%s: Allocating physical contigous bit stream buffer\n",
+		 enc->encoder_name);
 	enc->bs_mem_desc.size = STREAM_BUF_SIZE;
 	ret = IOGetPhyMem(&enc->bs_mem_desc);
 	if (ret) {
-		err_msg("Encoder: Unable to obtain physical memory\n");
+		err_msg("%s: Unable to obtain physical memory\n",
+			enc->encoder_name);
 		return -1;
 	}
 	enc->virt_bsbuf_addr = IOGetVirtMem(&enc->bs_mem_desc);
 	if (enc->virt_bsbuf_addr <= 0) {
-		err_msg("Encoder: Unable to map physical memory\n");
+		err_msg("%s: Unable to map physical memory\n",
+			enc->encoder_name);
 		IOFreePhyMem(&enc->bs_mem_desc);
 		return -1;
 	}
 
-	info_msg("Encoder: Allocating physical contigous output buffer\n");
+	info_msg("%s: Allocating physical contigous output buffer\n",
+		 enc->encoder_name);
 	enc->outbuf_desc.size = enc->enc_picwidth*enc->enc_picheight;
 	ret = IOGetPhyMem(&enc->outbuf_desc);
 	if (ret) {
-		err_msg("Encoder: Unable to obtain physical memory\n");
+		err_msg("%s: Unable to obtain physical memory\n",
+			enc->encoder_name);
 		return -1;
 	}
 	enc->virt_outbuf_addr = IOGetVirtMem(&enc->outbuf_desc);
 	if (enc->virt_outbuf_addr <= 0) {
-		err_msg("Encoder: Unable to map physical memory\n");
+		err_msg("%s: Unable to map physical memory\n",
+			enc->encoder_name);
 		IOFreePhyMem(&enc->outbuf_desc);
 		return -1;
 	}
@@ -56,23 +63,35 @@ int vpu_encoder_init(struct encoder_info *enc, struct mediaBuffer *enc_dst)
 	enc->linear2TiledEnable = 0;
 
 	/* open the encoder */
-	info_msg("Encoder: Opening the encoder\n");
+	info_msg("%s: Opening the encoder\n",
+		 enc->encoder_name);
 	ret = encoder_open(enc);
 	if (ret)
 		return -1;
 
 	/* Get the headers for the encoded data and copy them to media buffer*/
-	info_msg("Encoder: Filling the headers\n");
+	info_msg("%s: Filling the headers\n", enc->encoder_name);
 	ret = encoder_get_headers(enc, enc_dst);
 	if (ret)
 		return -1;
 
 	/* allocate memory for the frame buffers */
-	info_msg("Encoder: Allocating encoder framebuffers\n");
+	info_msg("%s: Allocating encoder framebuffers\n", enc->encoder_name);
 	ret = encoder_allocate_framebuffer(enc);
 	if (ret) {
 		return -1;
 	}
+
+	if (enc->sliceInfo.enable) {
+		ret = vpu_EncGiveCommand(enc->handle, ENC_SET_REPORT_SLICEINFO, &enc->sliceInfo);
+		if (ret != RETCODE_SUCCESS) {
+			err_msg("Failed to set slice info report, ret %d\n", ret);
+			return -1;
+		}
+		info_msg("%s: Slice info feature configured\n", enc->encoder_name);
+	}
+
+	info_msg("%s: Init finished successfully\n\n", enc->encoder_name);
 
 	return 0;
 }
@@ -80,16 +99,18 @@ int vpu_encoder_init(struct encoder_info *enc, struct mediaBuffer *enc_dst)
 int vpu_encoder_deinit(struct encoder_info *enc)
 {
 	/* free the allocated framebuffers */
-	info_msg("Encoder: Freeing encoder framebuffers\n");
+	info_msg("%s: Freeing encoder framebuffers\n", enc->encoder_name);
 	encoder_free_framebuffer(enc);
 
-	/* close the encoder */
-	info_msg("Encoder: Closing the encoder\n");
 	encoder_close(enc);
+
+	if (enc->sliceInfo.addr)
+		free(enc->sliceInfo.addr);
 
 	IOFreePhyMem(&enc->bs_mem_desc);
 	IOFreePhyMem(&enc->outbuf_desc);
 
+	info_msg("%s: encoder was deinitialized\n\n", enc->encoder_name);
 	return 0;
 }
 
@@ -111,11 +132,13 @@ int vpu_encoder_encode_frame(struct encoder_info *enc, struct mediaBuffer *vid_s
 	enc_param.encLeftOffset = 0;
 	enc_param.encTopOffset = 0;
 	if ((enc_param.encLeftOffset + enc->enc_picwidth) > enc->src_picwidth){
-		err_msg("Encoder: Configure is failure for width and left offset\n");
+		err_msg("%s: Configure is failure for width and left offset\n",
+			enc->encoder_name);
 		return -1;
 	}
 	if ((enc_param.encTopOffset + enc->enc_picheight) > enc->src_picheight){
-		err_msg("Encoder: Configure is failure for height and top offset\n");
+		err_msg("%s: Configure is failure for height and top offset\n",
+			enc->encoder_name);
 		return -1;
 	}
 
@@ -129,7 +152,7 @@ int vpu_encoder_encode_frame(struct encoder_info *enc, struct mediaBuffer *vid_s
 	gettimeofday(&total_start, NULL);
 	ret = read_source_frame(enc, vid_src);
 	if (ret <= 0) {
-		err_msg("Encoder: no data read from video source\n");
+		err_msg("%s: no data read from video source\n", enc->encoder_name);
 		return -1;
 	}
 	gettimeofday(&total_end, NULL);
@@ -150,7 +173,8 @@ int vpu_encoder_encode_frame(struct encoder_info *enc, struct mediaBuffer *vid_s
 
 	ret = vpu_EncStartOneFrame(handle, &enc_param);
 	if (ret != RETCODE_SUCCESS) {
-		err_msg("Encoder: vpu_EncStartOneFrame failed Err code:%d\n", ret);
+		err_msg("%s: vpu_EncStartOneFrame failed Err code:%d\n",
+			enc->encoder_name, ret);
 		return -1;
 	}
 
@@ -158,7 +182,7 @@ int vpu_encoder_encode_frame(struct encoder_info *enc, struct mediaBuffer *vid_s
 	while (vpu_IsBusy()) {
 		vpu_WaitForInt(200);
 		if (loop_id == 20) {
-			err_msg("Encoder: VPU sw reset failed\n");
+			err_msg("%s: VPU sw reset failed\n", enc->encoder_name);
 			ret = vpu_SWReset(handle, 0);
 			return -1;
 		}
@@ -167,12 +191,13 @@ int vpu_encoder_encode_frame(struct encoder_info *enc, struct mediaBuffer *vid_s
 
 	ret = vpu_EncGetOutputInfo(handle, &outinfo);
 	if (ret != RETCODE_SUCCESS) {
-		err_msg("Encoder: vpu_EncGetOutputInfo failed Err code: %d\n", ret);
+		err_msg("%s: vpu_EncGetOutputInfo failed Err code: %d\n",
+			enc->encoder_name, ret);
 		return -1;
 	}
 
 	if (outinfo.skipEncoded)
-		warn_msg("Encoder: Skip encoding one Frame!\n");
+		warn_msg("%s: Skip encoding one Frame!\n", enc->encoder_name);
 
 	/* Now that we have an output frame from encoder, save it to the
 	   the mediaBuffer structure so it can easily be accessed */
@@ -183,18 +208,16 @@ int vpu_encoder_encode_frame(struct encoder_info *enc, struct mediaBuffer *vid_s
 	enc_dst->bufOutSize = outinfo.bitstreamSize;
 	enc_dst->vBufOut = (unsigned char*)vbuf;
 	enc_dst->pBufOut = (unsigned char*)outinfo.bitstreamBuffer;
-	return 0;
-	
-	/* For now, we will always include headers with frame 
-	memcpy((unsigned char*)enc->virt_outbuf_addr + temp_size, vbuf,
-		outinfo.bitstreamSize);
-	temp_size += outinfo.bitstreamSize;
-	enc_dst->dataSource = VPU_CODEC;
-	enc_dst->bufOutSize = temp_size;
-	enc_dst->vBufOut = (unsigned char*)enc->virt_outbuf_addr;
-	enc_dst->pBufOut = (unsigned char*)enc->phy_outbuf_addr;
 
-	return 0;*/
+	/* Set NAL info */
+	SaveEncSliceInfo(outinfo.sliceInfo.addr, outinfo.sliceInfo.size,
+			 &enc_dst->nalInfo);
+	if (outinfo.picType == I_FRAME)
+		enc_dst->nalInfo.nalType = CODED_SLICE_IDR;
+	else
+		enc_dst->nalInfo.nalType = CODED_SLICE_NON_IDR;
+
+	return 0;
 }
 
 static int encoder_allocate_framebuffer(struct encoder_info *enc)
@@ -210,7 +233,7 @@ static int encoder_allocate_framebuffer(struct encoder_info *enc)
 	int enc_fbwidth, enc_fbheight, src_fbwidth, src_fbheight;
 
 	minfbcount = enc->minFrameBufferCount;
-	info_msg("Encoder: minimum framebuffers %d\n", minfbcount);
+	info_msg("%s: minimum framebuffers %d\n",enc->encoder_name,minfbcount);
 	srcfbcount = 1;
 
 	enc_fbwidth = (enc->enc_picwidth + 15) & ~15;
@@ -228,14 +251,15 @@ static int encoder_allocate_framebuffer(struct encoder_info *enc)
 
 	fb = enc->fb = calloc(totalfb, sizeof(FrameBuffer));
 	if (fb == NULL) {
-		err_msg("Encoder: Failed to allocate enc->fb\n");
+		err_msg("%s: Failed to allocate enc->fb\n", enc->encoder_name);
 		return -1;
 	}
 
 	pfbpool = enc->pfbpool = calloc(totalfb,
 					sizeof(struct frame_buf *));
 	if (pfbpool == NULL) {
-		err_msg("Encoder: Failed to allocate enc->pfbpool\n");
+		err_msg("%s: Failed to allocate enc->pfbpool\n",
+			enc->encoder_name);
 		free(fb);
 		return -1;
 	}
@@ -271,7 +295,8 @@ static int encoder_allocate_framebuffer(struct encoder_info *enc)
 					 src_stride, subSampBaseA,
 					 subSampBaseB, &extbufinfo);
 	if (ret != RETCODE_SUCCESS) {
-		err_msg("Encoder: Register frame buffer failed\n");
+		err_msg("%s: Register frame buffer failed\n",
+			enc->encoder_name);
 		goto ERROR;
 	}
 
@@ -279,7 +304,8 @@ static int encoder_allocate_framebuffer(struct encoder_info *enc)
 	pfbpool[src_fbid] = framebuf_alloc(2, enc->color_space,
 					   src_fbwidth, src_fbheight, 0);
 	if (pfbpool[src_fbid] == NULL) {
-		err_msg("Encoder: failed to allocate single framebuf\n");
+		err_msg("%s: failed to allocate single framebuf\n",
+			enc->encoder_name);
 		goto ERROR;
 	}
 
@@ -333,12 +359,14 @@ static int encoder_open(struct encoder_info *enc)
 	encop.linear2TiledEnable = 0;
 
 	if (enc->src_picwidth < 0 || enc->src_picheight < 0) {
-		err_msg("Encoder: Source picture size not set\n");
+		err_msg("%s: Source picture size not set\n",
+			enc->encoder_name);
 		return -1;
 	}
 
 	if (enc->enc_picwidth < 0 || enc->enc_picheight < 0) {
-		err_msg("Encoder: Encoded picture size not set\n");
+		err_msg("%s: Encoded picture size not set\n",
+			enc->encoder_name);
 		return -1;
 	}
 
@@ -347,19 +375,22 @@ static int encoder_open(struct encoder_info *enc)
 
 	/*Note: Frame rate cannot be less than 15fps per H.263 spec */
 	encop.frameRateInfo = enc->enc_fps;
-	info_msg("Encoder: frame rate is %d\n", (int)encop.frameRateInfo);
+	info_msg("%s: frame rate is %d\n",enc->encoder_name,
+		 (int)encop.frameRateInfo);
 	encop.bitRate = enc->enc_bit_rate;
-	info_msg("Encoder: bit rate is %d kbps\n", (int)encop.bitRate);
+	info_msg("%s: bit rate is %d kbps\n",enc->encoder_name,
+		 (int)encop.bitRate);
 	encop.gopSize = enc->gop_size;
-	info_msg("Encoder: GOP size is %d\n", (int)encop.gopSize);
-	encop.slicemode.sliceMode = 0;	/* 0: 1 slice per picture; 1: Multiple slices per picture */
+	info_msg("%s: GOP size is %d\n",enc->encoder_name,
+		 (int)encop.gopSize);
+	encop.slicemode.sliceMode = 1;	/* 0: 1 slice per picture; 1: Multiple slices per picture */
 	encop.slicemode.sliceSizeMode = 0; /* 0: silceSize defined by bits; 1: sliceSize defined by MB number*/
 	encop.slicemode.sliceSize = 4000;  /* Size of a slice in bits or MB numbers */
 
 	encop.initialDelay = 0;
 	encop.vbvBufferSize = 0;        /* 0 = ignore 8 */
 	encop.intraRefresh = 0;
-	encop.sliceReport = 0;
+	encop.sliceReport = 1;
 	encop.mbReport = 0;
 	encop.mbQpReport = 0;
 	encop.rcIntraQp = -1;
@@ -406,15 +437,21 @@ static int encoder_open(struct encoder_info *enc)
 
 	ret = vpu_EncOpen(&handle, &encop);
 	if (ret != RETCODE_SUCCESS) {
-		err_msg("Encoder: Encoder open failed %d\n", ret);
+		err_msg("%s: Encoder open failed %d\n",enc->encoder_name, ret);
 		return -1;
 	}
 
 	ret = vpu_EncGetInitialInfo(handle, &initinfo);
 	if (ret != RETCODE_SUCCESS) {
-		err_msg("Encoder: Encoder GetInitialInfo failed\n");
+		err_msg("%s: Encoder GetInitialInfo failed\n",
+			enc->encoder_name);
 		return -1;
 	}
+
+	enc->sliceInfo.enable = 1;
+	enc->sliceInfo.addr = malloc(initinfo.reportBufSize.sliceInfoBufSize);
+	if (!enc->sliceInfo.addr)
+		err_msg("%s: slice info buffer malloc_error\n", enc->encoder_name);
 
 	enc->minFrameBufferCount = initinfo.minFrameBufferCount;
 
@@ -448,11 +485,11 @@ static int encoder_get_headers(struct encoder_info *enc, struct mediaBuffer *enc
 	vpu_EncGiveCommand(enc->handle, ENC_PUT_AVC_HEADER, &enchdr_param);
 	/*Need to get the virtual address of the physical address from the
 	  vpu bitstream buffer */
-	vbuf = (unsigned char *)enc->virt_bsbuf_addr + 
-		enchdr_param.buf - enc->phy_bsbuf_addr;
+	vbuf = (void *)(enc->virt_bsbuf_addr + 
+		enchdr_param.buf - enc->phy_bsbuf_addr);
 	/*Now copy the header buffer to the global abv header buffer, which
 	  will then be pointed to the buffer that will be passed back */
-	memcpy((unsigned char *)enc->virt_outbuf_addr, vbuf,
+	memcpy((void *)(enc->virt_outbuf_addr), vbuf,
 		enchdr_param.size);
 	temp_size = enchdr_param.size;
 
@@ -460,11 +497,11 @@ static int encoder_get_headers(struct encoder_info *enc, struct mediaBuffer *enc
 	vpu_EncGiveCommand(enc->handle, ENC_PUT_AVC_HEADER, &enchdr_param);
 	/*Get virtual address as done before. Then copy the rest of the 
 	  headers into the global buffer to be passed back up completion */
-	vbuf = (unsigned char *)enc->virt_bsbuf_addr + 
-		enchdr_param.buf - enc->phy_bsbuf_addr;
-	memcpy((unsigned char *)enc->virt_outbuf_addr + temp_size,
+	vbuf = (void *)(enc->virt_bsbuf_addr + 
+		enchdr_param.buf - enc->phy_bsbuf_addr);
+	memcpy((void *)(enc->virt_outbuf_addr + temp_size),
 		vbuf, enchdr_param.size);
-		temp_size += enchdr_param.size;
+	temp_size += enchdr_param.size;
 
 	enc_dst->dataSource = VPU_CODEC;
 	enc_dst->bufOutSize = temp_size;
@@ -503,13 +540,15 @@ static int read_source_frame(struct encoder_info *enc, struct mediaBuffer *vid_s
 		chromaInterleave = 1;
 
 	if (enc->src_picwidth != pfb->strideY) {
-		err_msg("Encoder: Make sure src pic width is a multiple of 16\n");
+		err_msg("%s: Make sure src pic width is a multiple of 16\n",
+			enc->encoder_name);
 		return -1;
 	}
 
 	if ((format != YUV420P) && (format != YUYV) &&
 	    (format != YUV422P) && (format != NV12)) {
-		err_msg("Encoder: Video data is not in a valid color space\n");
+		err_msg("%s: Video data is not in a valid color space\n",
+			enc->encoder_name);
 		return -1;
 	}
 
@@ -543,16 +582,12 @@ static int read_source_frame(struct encoder_info *enc, struct mediaBuffer *vid_s
 
 	/* Read from YUV420 file source */
 	if (vid_src->dataSource == FILE_SRC) {
-		if (img_size == pfb->desc.size) {
-			ret = freadn(vid_src->fd, (void *)vdst_y, img_size);
+		ret = freadn(vid_src->fd, (void *)vdst_y, y_size);
+		if (chromaInterleave == 0) {
+			ret = freadn(vid_src->fd, (void *)vdst_u, c_size);
+			ret = freadn(vid_src->fd, (void *)vdst_v, c_size);
 		} else {
-			ret = freadn(vid_src->fd, (void *)vdst_y, y_size);
-			if (chromaInterleave == 0) {
-				ret = freadn(vid_src->fd, (void *)vdst_u, c_size);
-				ret = freadn(vid_src->fd, (void *)vdst_v, c_size);
-			} else {
-				ret = freadn(vid_src->fd, (void *)vdst_u, c_size * 2);
-			}
+			ret = freadn(vid_src->fd, (void *)vdst_u, c_size * 2);
 		}
 		return ret;
 	}
@@ -563,7 +598,7 @@ static int read_source_frame(struct encoder_info *enc, struct mediaBuffer *vid_s
 	if (vid_src->dataSource == VPU_CODEC) {
 		if (format == YUV422P) {
 			if(g2d_open(&g2d_handle)) {
-				err_msg("Encoder: g2d_open fail.\n");
+				err_msg("%s: g2d_open fail.\n", enc->encoder_name);
 				return -1;
 			}
 
@@ -602,7 +637,7 @@ static int read_source_frame(struct encoder_info *enc, struct mediaBuffer *vid_s
 			return img_size;
 		} else if (format == NV12) {
 			if(g2d_open(&g2d_handle)) {
-				err_msg("Encoder: g2d_open fail.\n");
+				err_msg("%s: g2d_open fail.\n", enc->encoder_name);
 				return -1;
 			}
 
@@ -655,8 +690,29 @@ static int read_source_frame(struct encoder_info *enc, struct mediaBuffer *vid_s
 			i += 4;
 		}
 		return vid_src->bufOutSize;
+	} else if (format == YUV420P) {
+			memcpy(vdst_y, vsrc_y, img_size);
+			return img_size;
+	} else if (format == NV12) {
+			memcpy(vdst_y, vsrc_y, img_size);
+			return img_size;
 	} else {
-		err_msg("Encoder: Unsupported format for VPU input\n");
+		err_msg("%s: Unsupported format for VPU input\n", enc->encoder_name);
 		return -1;
 	}
+}
+
+static void SaveEncSliceInfo(u8 *SliceParaBuf, int size, struct nalInfoStruct *nalInfo)
+{
+	int i, nMbAddr, nSliceBits;
+
+	for(i=0; i<size / 8; i++) {
+		nMbAddr = (SliceParaBuf[2] << 8) | SliceParaBuf[3];
+		nSliceBits = (int)(SliceParaBuf[4] << 24)|(SliceParaBuf[5] << 16)|
+				(SliceParaBuf[6] << 8)|(SliceParaBuf[7]);
+		//info_msg("[%2d] mbIndex.%3d, Bits.%d\n", i, nMbAddr, nSliceBits);
+		SliceParaBuf += 8;
+		nalInfo->nalLength[i] = nSliceBits/8;
+	}
+	nalInfo->nalNumber = i;
 }

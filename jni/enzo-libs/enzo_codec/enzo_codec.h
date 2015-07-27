@@ -10,6 +10,9 @@ extern "C" {
 #include "vpu_encode.h"
 #include "v4l2_camera.h"
 
+#define ENZO_SPS_SIZE	13
+#define ENZO_PPS_SIZE	9
+
 /* This structure is used to control and preserve the context
    of an encoder session. Anytime an encoder function is called,
    it must be provided with a valid encoderInstance structure. */
@@ -43,6 +46,8 @@ struct encoderInstance {
 			   state. For H.264 mode, the picture is encoded as an
 			   Instantaneous Decoding Refresh (IDR) picture. */
 	int colorSpace;	/* Color space of the data to be encoded. */
+
+	char encoderName[20];
 	
 	struct encoder_info enc; /* Structure that contains in-depth
 				    settings for encoder. It should
@@ -62,6 +67,8 @@ struct decoderInstance {
 			   input data. This will also be the height
 			   of the decoded data */
 	int fps;	/* Framerate of the decoded data */
+
+	char decoderName[20];
 	
 	struct decoder_info dec; /* Structure that contains in-depth
 				    settings for decoder. It should

@@ -22,7 +22,8 @@ static int decoder_allocate_framebuffer(struct decoder_info *dec);
 static void decoder_free_framebuffer(struct decoder_info *dec);
 static int decoder_decode_frame(struct decoder_info *dec, struct mediaBuffer *enc_src,
 			 	struct mediaBuffer *vid_dst);
-static int dec_fill_bsbuffer(DecHandle handle, struct mediaBuffer *enc_src,
+static int dec_fill_bsbuffer(struct decoder_info *dec,
+		DecHandle handle, struct mediaBuffer *enc_src,
 		u32 bs_va_startaddr, u32 bs_va_endaddr,
 		u32 bs_pa_startaddr, int defaultsize,
 		int *eos, int *fill_end_bs);
@@ -37,12 +38,14 @@ int vpu_decoder_init(struct decoder_info *dec, struct mediaBuffer *enc_src)
 	dec->bs_mem_desc.size = STREAM_BUF_SIZE;
 	ret = IOGetPhyMem(&dec->bs_mem_desc);
 	if (ret) {
-		err_msg("Decoder: Unable to obtain physical mem\n");
+		err_msg("%s: Unable to obtain physical mem\n",
+			dec->decoder_name);
 		return -1;
 	}
 
 	if (IOGetVirtMem(&dec->bs_mem_desc) <= 0) {
-		err_msg("Decoder: Unable to obtain virtual mem\n");
+		err_msg("%s: Unable to obtain virtual mem\n",
+			dec->decoder_name);
 		IOFreePhyMem(&dec->bs_mem_desc);
 		return -1;
 	}
@@ -51,8 +54,9 @@ int vpu_decoder_init(struct decoder_info *dec, struct mediaBuffer *enc_src)
 		dec->ps_mem_desc.size = PS_SAVE_SIZE;
 		ret = IOGetPhyMem(&dec->ps_mem_desc);
 		if (ret) {
-			err_msg("Decoder: Unable to obtain"
-				"physical ps save mem\n");
+			err_msg("%s: Unable to obtain"
+				"physical ps save mem\n",
+				dec->decoder_name);
 			IOFreePhyMem(&dec->bs_mem_desc);
 			return -1;
 		}
@@ -73,20 +77,24 @@ int vpu_decoder_init(struct decoder_info *dec, struct mediaBuffer *enc_src)
 	/* open decoder */
 	ret = decoder_open(dec, enc_src);
 	if (ret) {
-		err_msg("Decoder: Unable to open decoder instance\n");
+		err_msg("%s: Unable to open decoder instance\n",
+			dec->decoder_name);
 		IOFreePhyMem(&dec->bs_mem_desc);
 		IOFreePhyMem(&dec->ps_mem_desc);
 		return -1;
 	}
+
+	info_msg("%s: Init finished successfully\n\n",
+		 dec->decoder_name);
 
 	return 0;
 }
 
 int vpu_decoder_deinit(struct decoder_info *dec)
 {
-	info_msg("Decoder: Closing the decoder\n");
 	decoder_free_framebuffer(dec);
 	decoder_close(dec);
+	info_msg("%s: decoder was deinitialized\n\n", dec->decoder_name);
 	return 0;
 }
 int vpu_decoder_decode_frame(struct decoder_info *dec,
@@ -113,13 +121,13 @@ static int decoder_open(struct decoder_info *dec, struct mediaBuffer *enc_src)
 	if (dec->format == MJPEG) {
 		oparam.bitstreamFormat = STD_MJPG;
 		oparam.chromaInterleave = 0;
-		info_msg("Decoder: MJPEG requested\n");
+		info_msg("%s: MJPEG requested\n", dec->decoder_name);
 	} else if (dec->format == H264AVC) {
 		oparam.bitstreamFormat = STD_AVC;
 		oparam.chromaInterleave = 1;
-		info_msg("Decoder: H264 AVC requested\n");
+		info_msg("%s: H264 AVC requested\n", dec->decoder_name);
 	} else {
-		err_msg("Decoder: Unsupported format\n");
+		err_msg("%s: Unsupported format\n", dec->decoder_name);
 		return -1;
 	}
 
@@ -137,34 +145,35 @@ static int decoder_open(struct decoder_info *dec, struct mediaBuffer *enc_src)
 	oparam.psSaveBuffer = dec->phy_ps_buf;
 	oparam.psSaveBufferSize = PS_SAVE_SIZE;
 
-	info_msg("Decoder: Opening the decoder\n");
+	info_msg("%s: Opening the decoder\n", dec->decoder_name);
 	ret = vpu_DecOpen(&handle, &oparam);
 	if (ret != RETCODE_SUCCESS) {
-		err_msg("Decoder: vpu_DecOpen failed, ret:%d\n", ret);
+		err_msg("%s: vpu_DecOpen failed, ret:%d\n",dec->decoder_name,
+			ret);
 		return -1;
 	}
 
 	memcpy(&dec->handle, &handle, sizeof(DecHandle));
 
-	info_msg("Decoder: Parsing input data\n");
-	ret = dec_fill_bsbuffer(dec->handle, enc_src,
+	info_msg("%s: Parsing input data\n", dec->decoder_name);
+	ret = dec_fill_bsbuffer(dec, dec->handle, enc_src,
 			dec->virt_bsbuf_addr,
 			(dec->virt_bsbuf_addr + STREAM_BUF_SIZE),
 			dec->phy_bsbuf_addr, fillsize, &eos, &fill_end_bs);
 
 	if (fill_end_bs)
-		err_msg("Decoder: Update 0 before seqinit, \
-			 fill_end_bs=%d\n", fill_end_bs);
+		err_msg("%s: Update 0 before seqinit, \
+			 fill_end_bs=%d\n",dec->decoder_name, fill_end_bs);
 
 	if (ret < 0) {
-		err_msg("Decoder: dec_fill_bsbuffer failed\n");
+		err_msg("%s: dec_fill_bsbuffer failed\n", dec->decoder_name);
 		return -1;
 	}
 
 	/* parse the bitstream */
 	ret = decoder_parse(dec);
 	if (ret) {
-		err_msg("Decoder: Parse failed\n");
+		err_msg("%s: Parse failed\n", dec->decoder_name);
 		return -1;
 	}
 
@@ -172,18 +181,19 @@ static int decoder_open(struct decoder_info *dec, struct mediaBuffer *enc_src)
 		dec->slice_mem_desc.size = dec->phy_slicebuf_size;
 		ret = IOGetPhyMem(&dec->slice_mem_desc);
 		if (ret) {
-			err_msg("Decoder: Unable to obtain"
-				"physical slice save mem\n");
+			err_msg("%s: Unable to obtain"
+				"physical slice save mem\n",dec->decoder_name);
 			return -1;
 		}
 		dec->phy_slice_buf = dec->slice_mem_desc.phy_addr;
 	}
 
 	/* allocate frame buffers */
-	info_msg("Decoder: Allocating framebuffer\n");
+	info_msg("%s: Allocating framebuffer\n", dec->decoder_name);
 	ret = decoder_allocate_framebuffer(dec);
 	if (ret) {
-		err_msg("Decoder: Couldn't allocate framebuffer\n");
+		err_msg("%s: Couldn't allocate framebuffer\n",
+			dec->decoder_name);
 		IOFreePhyMem(&dec->slice_mem_desc);
 		return -1;
 	}
@@ -200,7 +210,7 @@ static void decoder_close(struct decoder_info *dec)
 		vpu_SWReset(dec->handle, 0);
 		ret = vpu_DecClose(dec->handle);
 		if (ret != RETCODE_SUCCESS)
-			err_msg("Decoder: vpu_DecClose failed\n");
+			err_msg("%s: vpu_DecClose failed\n",dec->decoder_name);
 	}
 
 	IOFreePhyMem(&dec->bs_mem_desc);
@@ -228,17 +238,18 @@ static int decoder_allocate_framebuffer(struct decoder_info *dec)
 	color_space = dec->color_space;
 
 	totalfb = regfbcount + dec->extrafb;
-	info_msg("Decoder: regfb %d, extrafb %d\n", regfbcount, dec->extrafb);
+	info_msg("%s: regfb %d, extrafb %d\n",
+		 dec->decoder_name, regfbcount, dec->extrafb);
 
 	fb = dec->fb = calloc(totalfb, sizeof(FrameBuffer));
 	if (fb == NULL) {
-		err_msg("Decoder: Failed to allocate fb\n");
+		err_msg("%s: Failed to allocate fb\n",dec->decoder_name);
 		return -1;
 	}
 
 	pfbpool = dec->pfbpool = calloc(totalfb, sizeof(struct frame_buf *));
 	if (pfbpool == NULL) {
-		err_msg("Decoder: Failed to allocate pfbpool\n");
+		err_msg("%s: Failed to allocate pfbpool\n",dec->decoder_name);
 		free(dec->fb);
 		dec->fb = NULL;
 		return -1;
@@ -258,7 +269,8 @@ static int decoder_allocate_framebuffer(struct decoder_info *dec)
 		pfbpool[i] = framebuf_alloc(vpu_fmt, color_space,
 				    dec->stride, dec->picheight, mvCol);
 		if (pfbpool[i] == NULL) {
-			err_msg("Decoder: framebuf_alloc returned NULL\n");
+			err_msg("%s: framebuf_alloc returned NULL\n",
+				dec->decoder_name);
 			goto err;
 			}
 	}
@@ -292,7 +304,8 @@ static int decoder_allocate_framebuffer(struct decoder_info *dec)
 
 	ret = vpu_DecRegisterFrameBuffer(handle, fb, dec->regfbcount, stride, &bufinfo);
 	if (ret != RETCODE_SUCCESS) {
-		err_msg("Register frame buffer failed, ret=%d\n", ret);
+		err_msg("%s: Register frame buffer failed, ret=%d\n",
+			dec->decoder_name, ret);
 		goto err;
 	}
 
@@ -347,13 +360,13 @@ static int decoder_parse(struct decoder_info *dec)
 	ret = vpu_DecGetInitialInfo(handle, &initinfo);
 	vpu_DecSetEscSeqInit(handle, 0);
 	if (ret != RETCODE_SUCCESS) {
-		err_msg("Decoder: vpu_DecGetInitialInfo failed, ret:%d, errorcode:%ld\n",
-		         ret, initinfo.errorcode);
+		err_msg("%s: vpu_DecGetInitialInfo failed, ret:%d, errorcode:%ld\n",
+		         dec->decoder_name, ret, initinfo.errorcode);
 		return -1;
 	}
 
 	if (dec->format == H264AVC) {
-		info_msg("Decoder: H.264 Profile: %d Level: %d Interlace: %d\n",
+		info_msg("%s: H.264 Profile: %d Level: %d Interlace: %d\n",dec->decoder_name,
 			initinfo.profile, initinfo.level, initinfo.interlace);
 
 		if (initinfo.aspectRateInfo) {
@@ -362,30 +375,31 @@ static int decoder_parse(struct decoder_info *dec)
 
 			if ((initinfo.aspectRateInfo >> 16) == 0) {
 				aspect_ratio_idc = (initinfo.aspectRateInfo & 0xFF);
-				info_msg("Decoder: aspect_ratio_idc: %d\n",
-					aspect_ratio_idc);
+				info_msg("%s: aspect_ratio_idc: %d\n",
+					dec->decoder_name,aspect_ratio_idc);
 			} else {
 				sar_width = (initinfo.aspectRateInfo >> 16) & 0xFFFF;
 				sar_height = (initinfo.aspectRateInfo & 0xFFFF);
-				info_msg("Decoder: sar_width: %d, sar_height: %d\n",
-					sar_width, sar_height);
+				info_msg("%s: sar_width: %d, sar_height: %d\n",
+					 dec->decoder_name, sar_width, sar_height);
 			}
 		dec->color_space = NV12;
 		} else {
-			info_msg("Decoder: Aspect Ratio is not present.\n");
+			info_msg("%s: Aspect Ratio is not present.\n",
+				 dec->decoder_name);
 		}
 	} else if (dec->format == MJPEG) {
 		dec->mjpg_fmt = initinfo.mjpg_sourceFormat;
-		info_msg("Decoder: MJPG SourceFormat: %d\n",
-			initinfo.mjpg_sourceFormat);
+		info_msg("%s: MJPG SourceFormat: %d\n",
+			dec->decoder_name, initinfo.mjpg_sourceFormat);
 		dec->color_space = YUV422P;
 	}
 
 	dec->lastPicWidth = initinfo.picWidth;
 	dec->lastPicHeight = initinfo.picHeight;
 
-	info_msg("Decoder: width = %d, height = %d, frameRateRes = %lu, frameRateDiv = %lu, count = %u\n",
-		initinfo.picWidth, initinfo.picHeight,
+	info_msg("%s: width = %d, height = %d, frameRateRes = %lu, frameRateDiv = %lu, count = %u\n",
+		dec->decoder_name, initinfo.picWidth, initinfo.picHeight,
 		initinfo.frameRateRes, initinfo.frameRateDiv,
 		initinfo.minFrameBufferCount);
 
@@ -413,7 +427,8 @@ static int decoder_parse(struct decoder_info *dec)
 		dec->regfbcount = dec->minfbcount + extended_fbcount + 2;
 	else
 		dec->regfbcount = dec->minfbcount + extended_fbcount;
-	info_msg("Decoder: minfb %d, extfb %d\n", dec->minfbcount, extended_fbcount);
+	info_msg("%s: minfb %d, extfb %d\n",dec->decoder_name,
+		 dec->minfbcount, extended_fbcount);
 
 	dec->picwidth = ((initinfo.picWidth + 15) & ~15);
 	align = 16;
@@ -448,7 +463,8 @@ static int decoder_parse(struct decoder_info *dec)
 		initinfo.picCropRect.bottom = initinfo.picHeight;
 	}
 
-	info_msg("Decoder: Crop left/top/right/bottom %lu %lu %lu %lu\n",
+	info_msg("%s: Crop left/top/right/bottom %lu %lu %lu %lu\n",
+					dec->decoder_name,
 					initinfo.picCropRect.left,
 					initinfo.picCropRect.top,
 					initinfo.picCropRect.right,
@@ -461,16 +477,14 @@ static int decoder_parse(struct decoder_info *dec)
 	dec->phy_slicebuf_size = initinfo.worstSliceSize * 1024;
 	dec->stride = dec->picwidth;
 
-	//if (initinfo.mjpg_sourceFormat == 1) {
-	//}
-
 	return 0;
 }
 
 /*
  * Fill the bitstream ring buffer
  */
-static int dec_fill_bsbuffer(DecHandle handle, struct mediaBuffer *enc_src,
+static int dec_fill_bsbuffer(struct decoder_info *dec,
+		DecHandle handle, struct mediaBuffer *enc_src,
 		u32 bs_va_startaddr, u32 bs_va_endaddr,
 		u32 bs_pa_startaddr, int defaultsize,
 		int *eos, int *fill_end_bs)
@@ -496,7 +510,8 @@ static int dec_fill_bsbuffer(DecHandle handle, struct mediaBuffer *enc_src,
 	}
 
 	if (ret != RETCODE_SUCCESS) {
-		err_msg("Decoder: vpu_DecGetBitstreamBuffer failed\n");
+		err_msg("%s: vpu_DecGetBitstreamBuffer failed\n",
+			dec->decoder_name);
 		return -1;
 	}
 
@@ -518,7 +533,7 @@ static int dec_fill_bsbuffer(DecHandle handle, struct mediaBuffer *enc_src,
 	}
 
 	if (size == 0) {
-		warn_msg("Decoder: size == 0, space %lu\n", space);
+		warn_msg("%s: size == 0, space %lu\n",dec->decoder_name, space);
 		return 0;
 	}
 
@@ -538,7 +553,8 @@ static int dec_fill_bsbuffer(DecHandle handle, struct mediaBuffer *enc_src,
 					if (nread == -EAGAIN)
 						return 0;
 
-					err_msg("Decoder: nread %d < 0\n", nread);
+					err_msg("%s: nread %d < 0\n",
+						dec->decoder_name, nread);
 					return -1;
 				}
 
@@ -559,7 +575,8 @@ static int dec_fill_bsbuffer(DecHandle handle, struct mediaBuffer *enc_src,
 						if (nread == -EAGAIN)
 							return 0;
 
-						err_msg("Decoder: nread %d < 0\n", nread);
+						err_msg("%s: nread %d < 0\n",
+							dec->decoder_name, nread);
 						return -1;
 					}
 
@@ -586,7 +603,8 @@ static int dec_fill_bsbuffer(DecHandle handle, struct mediaBuffer *enc_src,
 				size - room);
 			nread = size;	
 		} else {
-			err_msg("Decoder: unsupported data source for decode\n");
+			err_msg("%s: unsupported data source for decode\n",
+				dec->decoder_name);
 			return -1;
 		}
 	} else {
@@ -604,7 +622,8 @@ static int dec_fill_bsbuffer(DecHandle handle, struct mediaBuffer *enc_src,
 			nread = size;
 		}
 		else {
-			err_msg("Decoder: unsupported data source for decode\n");
+			err_msg("%s: unsupported data source for decode\n",
+				dec->decoder_name);
 		}
 		if (nread <= 0) {
 			/* EOF or error */
@@ -613,7 +632,8 @@ static int dec_fill_bsbuffer(DecHandle handle, struct mediaBuffer *enc_src,
 				if (nread == -EAGAIN)
 					return 0;
 
-				err_msg("Decoder: nread %d < 0\n", nread);
+				err_msg("%s: nread %d < 0\n",dec->decoder_name,
+					nread);
 				return -1;
 			}
 
@@ -626,7 +646,8 @@ update:
 	if (*eos == 0) {
 		ret = vpu_DecUpdateBitstreamBuffer(handle, nread);
 		if (ret != RETCODE_SUCCESS) {
-			err_msg("Decoder: vpu_DecUpdateBitstreamBuffer failed\n");
+			err_msg("%s: vpu_DecUpdateBitstreamBuffer failed\n",
+				dec->decoder_name);
 			return -1;
 		}
 		*fill_end_bs = 0;
@@ -635,8 +656,8 @@ update:
 			ret = vpu_DecUpdateBitstreamBuffer(handle,
 					STREAM_END_SIZE);
 			if (ret != RETCODE_SUCCESS) {
-				err_msg("Decoder: vpu_DecUpdateBitstreamBuffer failed"
-								"\n");
+				err_msg("%s: vpu_DecUpdateBitstreamBuffer failed\n",
+					dec->decoder_name);
 				return -1;
 			}
 			*fill_end_bs = 1;
@@ -684,13 +705,13 @@ static int decoder_decode_frame(struct decoder_info *dec, struct mediaBuffer *en
 	 * 3. after vpu_DecGetOutputInfo.
 	 */
 
-	err = dec_fill_bsbuffer(handle, enc_src,
+	err = dec_fill_bsbuffer(dec, handle, enc_src,
 		    dec->virt_bsbuf_addr,
 		    (dec->virt_bsbuf_addr + STREAM_BUF_SIZE),
 		    dec->phy_bsbuf_addr, STREAM_FILL_SIZE,
 		    &eos, &fill_end_bs);
 	if (err < 0) {
-		err_msg("Decoder: dec_fill_bsbuffer failed\n");
+		err_msg("%s: dec_fill_bsbuffer failed\n", dec->decoder_name);
 		return DEC_ERROR;
 	}
 
@@ -763,22 +784,25 @@ static int decoder_decode_frame(struct decoder_info *dec, struct mediaBuffer *en
 
 		ret = vpu_DecStartOneFrame(handle, &decparam);
 		if (ret == RETCODE_JPEG_EOS) {
-			info_msg("Decoder: JPEG bitstream is end\n");
+			info_msg("%s: JPEG bitstream is end\n",
+				 dec->decoder_name);
 			return DEC_ERROR;
 		} else if (ret == RETCODE_JPEG_BIT_EMPTY) {
-			err = dec_fill_bsbuffer(handle, enc_src,
+			err = dec_fill_bsbuffer(dec, handle, enc_src,
 				    dec->virt_bsbuf_addr,
 				    (dec->virt_bsbuf_addr + STREAM_BUF_SIZE),
 				    dec->phy_bsbuf_addr, STREAM_FILL_SIZE,
 				    &eos, &fill_end_bs);
 			if (err < 0) {
-				err_msg("Decoder: dec_fill_bsbuffer failed\n");
+				err_msg("%s: dec_fill_bsbuffer failed\n",
+					dec->decoder_name);
 				return DEC_ERROR;
 			}
 		}
 
 		if (ret != RETCODE_SUCCESS) {
-			err_msg("Decoder: DecStartOneFrame failed, ret=%d\n", ret);
+			err_msg("%s: DecStartOneFrame failed, ret=%d\n",
+				dec->decoder_name, ret);
 			return DEC_ERROR;
 		}
 
@@ -787,7 +811,7 @@ static int decoder_decode_frame(struct decoder_info *dec, struct mediaBuffer *en
 		while (vpu_IsBusy()) {
 			if (dec->format != MJPEG) {
 				//Avoid doing this for now. Fill buffer beginning of sequence instead.
-				/*err = dec_fill_bsbuffer(handle, enc_src,
+				/*err = dec_fill_bsbuffer(dec, handle, enc_src,
 					    dec->virt_bsbuf_addr,
 					    (dec->virt_bsbuf_addr + STREAM_BUF_SIZE),
 					    dec->phy_bsbuf_addr, STREAM_FILL_SIZE,
@@ -829,8 +853,8 @@ static int decoder_decode_frame(struct decoder_info *dec, struct mediaBuffer *en
 		}
 
 		if (ret != RETCODE_SUCCESS) {
-			err_msg("Decoder: vpu_DecGetOutputInfo failed Err code is %d\n"
-				"\tframe_id = %d\n", ret, (int)frame_id);
+			err_msg("%s: vpu_DecGetOutputInfo failed Err code is %d\n"
+				"\tframe_id = %d\n",dec->decoder_name, ret, (int)frame_id);
 			return DEC_ERROR;
 		}
 
@@ -838,8 +862,8 @@ static int decoder_decode_frame(struct decoder_info *dec, struct mediaBuffer *en
 			//warn_msg("Decoder: Incomplete finish of decoding process.\n");
 			if ((outinfo.indexFrameDecoded >= 0) && (outinfo.numOfErrMBs)) {
 				if (enc_src->dataType == MJPEG)
-					info_msg("Decoder: Error Mb info:0x%x,\n",
-						outinfo.numOfErrMBs);
+					info_msg("%s: Error Mb info:0x%x,\n",
+						dec->decoder_name, outinfo.numOfErrMBs);
 			}
 		}
 
@@ -858,12 +882,12 @@ static int decoder_decode_frame(struct decoder_info *dec, struct mediaBuffer *en
 		}*/
 
 		if (outinfo.notSufficientPsBuffer) {
-			err_msg("Decoder: PS Buffer overflow\n");
+			err_msg("%s: PS Buffer overflow\n",dec->decoder_name);
 			return DEC_ERROR;
 		}
 
 		if (outinfo.notSufficientSliceBuffer) {
-			err_msg("Decoder: Slice Buffer overflow\n");
+			err_msg("%s: Slice Buffer overflow\n", dec->decoder_name);
 			return DEC_ERROR;
 		}
 
@@ -886,7 +910,8 @@ static int decoder_decode_frame(struct decoder_info *dec, struct mediaBuffer *en
 			 */
 			if ((outinfo.decPicWidth != dec->lastPicWidth)
 					||(outinfo.decPicHeight != dec->lastPicHeight)) {
-				warn_msg("Decoder: resolution changed from %dx%d to %dx%d\n",
+				warn_msg("%s: resolution changed from %dx%d to %dx%d\n",
+						dec->decoder_name,
 						dec->lastPicWidth, dec->lastPicHeight,
 						outinfo.decPicWidth, outinfo.decPicHeight);
 				dec->lastPicWidth = outinfo.decPicWidth;
@@ -895,8 +920,8 @@ static int decoder_decode_frame(struct decoder_info *dec, struct mediaBuffer *en
 
 			if (outinfo.numOfErrMBs) {
 				totalNumofErrMbs += outinfo.numOfErrMBs;
-				info_msg("Decoder: Num of Error Mbs : %d\n",
-						outinfo.numOfErrMBs);
+				info_msg("%s: Num of Error Mbs : %d\n",
+						dec->decoder_name, outinfo.numOfErrMBs);
 			}
 		}
 
@@ -913,11 +938,10 @@ static int decoder_decode_frame(struct decoder_info *dec, struct mediaBuffer *en
 			if (enc_src->dataType != MJPEG && disp_clr_index >= 0) {
 				err = vpu_DecClrDispFlag(handle, disp_clr_index);
 				if (err)
-					err_msg("Decoder: vpu_DecClrDispFlag failed Error code"
-							" %d\n", err);
+					err_msg("%s: vpu_DecClrDispFlag failed Error code"
+							" %d\n",dec->decoder_name, err);
 			}
 			disp_clr_index = outinfo.indexFrameDisplay;
-			return_code = DEC_NO_NEW_FRAME;
 			param_change_loop++;
 			continue;
 		}
@@ -942,8 +966,8 @@ static int decoder_decode_frame(struct decoder_info *dec, struct mediaBuffer *en
 		if (dec->format != MJPEG && disp_clr_index >= 0) {
 			err = vpu_DecClrDispFlag(handle,disp_clr_index);
 			if (err)
-				err_msg("Decoder: vpu_DecClrDispFlag failed Error code"
-					" %d\n", err);
+				err_msg("%s: vpu_DecClrDispFlag failed Error code"
+					" %d\n",dec->decoder_name, err);
 		}
 		dec->disp_clr_index = outinfo.indexFrameDisplay;
 
@@ -952,8 +976,8 @@ static int decoder_decode_frame(struct decoder_info *dec, struct mediaBuffer *en
 			usleep(strtol(delay_ms,&endptr, 10) * 1000);
 
 		if (totalNumofErrMbs) {
-			info_msg("Decoder: Total Num of Error MBs : %d\n",
-				totalNumofErrMbs);
+			info_msg("%s: Total Num of Error MBs : %d\n",
+				dec->decoder_name, totalNumofErrMbs);
 		}
 
 		/* If we get here, we don't need to loop. Looping will only

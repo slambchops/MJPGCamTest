@@ -19,6 +19,9 @@ extern "C" {
 #define warn_msg(...) __android_log_print(ANDROID_LOG_ERROR,LOG_TAG_ENZO_CODEC,__VA_ARGS__)
 #define err_msg(...) __android_log_print(ANDROID_LOG_ERROR,LOG_TAG_ENZO_CODEC,__VA_ARGS__)
 
+/* The amount of NAL slices into which an encoded picture can be divided */
+#define MAX_NAL_PER_PICTURE	300
+
 typedef unsigned long u32;
 typedef unsigned short u16;
 typedef unsigned char u8;
@@ -58,6 +61,29 @@ enum {
 	DEC_NEW_FRAME		= 0,
 	DEC_NO_NEW_FRAME	= -1,
 	DEC_ERROR		= -2
+};
+
+/* H264 NAL types */
+enum {
+	CODED_SLICE_NON_IDR	= 1,
+	CODED_SLICE_DAT_PART_A	= 2,
+	CODED_SLICE_DAT_PART_B	= 3,
+	CODED_SLICE_DAT_PART_C	= 4,
+	CODED_SLICE_IDR		= 5,
+	SEI			= 6,
+	SEQ_PARAM_SET		= 7,
+	PIC_PARAM_SET		= 8,
+	ACCESS_UNIT_DELIM	= 9,
+	END_OF_SEQUENCE		= 10,
+	END_OF_STREAM		= 11,
+	FILLER_DATA		= 12,
+	SEQ_PARAM_SET_EXT	= 13
+};
+
+struct nalInfoStruct {
+	int nalType;
+	int nalNumber;
+	int nalLength[MAX_NAL_PER_PICTURE];
 };
 
 /* The mediaBuffer struct is used to share data between different components
@@ -120,6 +146,8 @@ struct mediaBuffer {
 	unsigned char *pBufOut;
 	/* Physical address of data. Not all processes will produce
 	   physically contiguous buffers, so this pointer may be NULL */
+
+	struct nalInfoStruct nalInfo;
 
 	vpu_mem_desc desc;
 };

@@ -40,6 +40,8 @@ struct encoder_info {
 	vpu_mem_desc bs_mem_desc;
 	vpu_mem_desc outbuf_desc;
 	void *g2d_handle;
+	char encoder_name[12];
+	EncReportInfo sliceInfo;
 };
 
 int vpu_encoder_init(struct encoder_info *enc, struct mediaBuffer *enc_dst);
